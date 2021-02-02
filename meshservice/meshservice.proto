@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package meshservice;
+
+option go_package = "github.com/aschmidt75/wgmesh/meshservice";
+
+service Mesh {
+    rpc BeginJoin(JoinRequest) returns (JoinResponse) {}
+}
+
+message JoinRequest {
+    string pubkey = 1;
+    string endpointIP = 2;
+    int32 endpointPort = 3;
+}
+
+message JoinResponse {
+    enum Result {
+        OK = 0;
+        ERROR = 1;
+    }
+    Result result = 1;
+    string errorMessage = 2;
+
+    string pubkey = 3;
+    string endpointIP = 4;
+    int32 endpointPort = 5;
+    string joinerMeshIP = 6;
+}

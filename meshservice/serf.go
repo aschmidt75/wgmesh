@@ -1,6 +1,7 @@
-package cluster
+package meshservice
 
 import (
+	"errors"
 	"os"
 	"time"
 
@@ -9,17 +10,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Cluster ...
-type Cluster struct {
-	cfg *serf.Config
-	s   *serf.Serf
-}
-
-// NewCluster sets up a cluster with a given nodeName,
+// NewSerfCluster sets up a cluster with a given nodeName,
 // a bind address
-func NewCluster(nodeName string, bindAddr string) *Cluster {
+func (ms *MeshService) NewSerfCluster() {
 
-	cfg := serfCustomWANConfig(nodeName, bindAddr)
+	cfg := serfCustomWANConfig(ms.NodeName, ms.MeshIP.String())
 
 	ch := make(chan serf.Event, 1)
 	go func(ch <-chan serf.Event) {
@@ -32,9 +27,23 @@ func NewCluster(nodeName string, bindAddr string) *Cluster {
 	}(ch)
 	cfg.EventCh = ch
 
-	return &Cluster{
-		cfg: cfg,
+	ms.cfg = cfg
+
+}
+
+// StartSerfCluster is used by bootstrap to set up the initial serf cluster node
+func (ms *MeshService) StartSerfCluster() error {
+
+	s, err := serf.Create(ms.cfg)
+	if err != nil {
+		return errors.New("Unable to set up serf cluster")
 	}
+
+	ms.s = s
+
+	log.Debug("started serf cluster")
+
+	return nil
 }
 
 func serfCustomWANConfig(nodeName string, bindAddr string) *serf.Config {

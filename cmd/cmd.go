@@ -14,6 +14,7 @@ type Runner interface {
 
 var cmds = []Runner{
 	NewBootstrapCommand(),
+	NewJoinCommand(),
 }
 
 func ProcessCommands(args []string) error {
