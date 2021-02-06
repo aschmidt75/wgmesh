@@ -8,8 +8,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -44,7 +42,7 @@ func NewJoinCommand() *JoinCommand {
 	c.fs.StringVar(&c.meshName, "n", c.meshName, "name of the mesh network (short)")
 	c.fs.StringVar(&c.endpoint, "bootstrap-addr", c.endpoint, "IP:Port of remote mesh bootstrap node")
 	c.fs.IntVar(&c.listenPort, "listen-port", c.listenPort, "set the (external) wireguard listen port")
-	c.fs.StringVar(&c.listenIP, "listen-ip", c.listenIP, "set the (external) wireguard listen IP. May be an IP adress, or an interface name (e.g. eth0) or a numbered address on an interface (e.g. eth0%1)")
+	c.fs.StringVar(&c.listenIP, "listen-addr", c.listenIP, "set the (external) wireguard listen IP. May be an IP adress, or an interface name (e.g. eth0) or a numbered address on an interface (e.g. eth0%1)")
 	c.DefaultFields(c.fs)
 
 	return c
@@ -70,70 +68,19 @@ func (g *JoinCommand) Init(args []string) error {
 		return errors.New("mesh name (--name, -n) must have maximum length of 10")
 	}
 
-	// TODO endpoint
+	if net.ParseIP(g.endpoint) == nil {
+		return fmt.Errorf("%s is not a valid ip for -bootstrap-addr", g.endpoint)
+	}
 
 	if g.listenPort < 0 || g.listenPort > 65535 {
 		return fmt.Errorf("%d is not valid for -listen-port", g.listenPort)
 	}
 
-	// TODO listenIP
+	if net.ParseIP(g.listenIP) == nil {
+		return fmt.Errorf("%s is not a valid ip for -listen-addr", g.listenIP)
+	}
 
 	return nil
-}
-
-func getIPFromListenIPParam(i string) net.IP {
-
-	// is this an IP address?
-	ok := true
-	for _, c := range i {
-		if (c >= '0' && c <= '9') || c == '.' {
-			ok = true
-		} else {
-			ok = false
-			break
-		}
-	}
-	if ok {
-		return net.ParseIP(i)
-	}
-
-	arr := strings.Split(i, "%")
-	idx := 0
-	if len(arr) >= 2 {
-		i = arr[0]
-		var err error
-		idx, err = strconv.Atoi(arr[1])
-		if err != nil {
-			idx = 0
-		}
-	}
-
-	log.WithField("idx", idx).Trace(".")
-
-	// is it a valid interface name?
-	intf, err := net.InterfaceByName(i)
-	if err != nil {
-		return nil
-	}
-
-	addrs, err := intf.Addrs()
-	if err != nil {
-		return nil
-	}
-
-	log.WithField("addrs", addrs).Trace(".")
-
-	if idx >= len(addrs) {
-		return nil
-	}
-
-	s := addrs[idx].String()
-	if strings.IndexAny(s, "/") >= 0 {
-		arr = strings.Split(s, "/")
-		s = arr[0]
-	}
-
-	return net.ParseIP(s)
 }
 
 // Run runs the command by creating the wireguard interface,
@@ -143,7 +90,7 @@ func (g *JoinCommand) Run() error {
 		"Running cli command",
 	)
 
-	listenIP := getIPFromListenIPParam(g.listenIP)
+	listenIP := getIPFromIPOrIntfParam(g.listenIP)
 	log.WithField("ip", listenIP).Trace("parsed -listen-ip")
 	if listenIP == nil {
 		return errors.New("need -listen-ip")

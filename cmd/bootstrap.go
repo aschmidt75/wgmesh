@@ -73,6 +73,7 @@ func (g *BootstrapCommand) Init(args []string) error {
 	if len(g.meshName) > 10 {
 		return errors.New("mesh name (--name, -n) must have maximum length of 10")
 	}
+
 	_, _, err = net.ParseCIDR(g.cidrRange)
 	if err != nil {
 		return fmt.Errorf("%s is not a valid cidr range for -cidr", g.cidrRange)
@@ -81,17 +82,22 @@ func (g *BootstrapCommand) Init(args []string) error {
 		return fmt.Errorf("%s is not a valid ip for -ip", g.ip)
 	}
 
-	if g.wgListenAddr == "" {
-		return fmt.Errorf("-listen-addr must be given.")
+	// ip must be a local one
+	if pr, _ := isPrivateIP(g.ip); pr == false {
+		return fmt.Errorf("-ip %s is not RFC1918, must be a private address", g.ip)
 	}
-
-	// TODO: ip, must be RFC local
 
 	if g.wgListenPort < 0 || g.wgListenPort > 65535 {
 		return fmt.Errorf("%d is not valid for -listen-port", g.wgListenPort)
 	}
 
-	// TODO: grpc bind address
+	if net.ParseIP(g.wgListenAddr) == nil {
+		return fmt.Errorf("%s is not a valid ip for -listen-addr", g.wgListenAddr)
+	}
+
+	if net.ParseIP(g.grpcBindAddr) == nil {
+		return fmt.Errorf("%s is not a valid ip for -grpc-bind-addr", g.grpcBindAddr)
+	}
 
 	if g.grpcBindPort < 0 || g.grpcBindPort > 65535 {
 		return fmt.Errorf("%d is not valid for -grpc-bind-port", g.grpcBindPort)
@@ -107,7 +113,7 @@ func (g *BootstrapCommand) Run() error {
 		"Running cli command",
 	)
 
-	wgListenAddr := getIPFromListenIPParam(g.wgListenAddr)
+	wgListenAddr := getIPFromIPOrIntfParam(g.wgListenAddr)
 	log.WithField("ip", wgListenAddr).Trace("parsed -listen-addr")
 	if wgListenAddr == nil {
 		return errors.New("need -listen-addr as IP address or interface name")
