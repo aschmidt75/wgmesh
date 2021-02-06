@@ -1,8 +1,10 @@
 package meshservice
 
 import (
+	"fmt"
 	"net"
 
+	wgwrapper "github.com/aschmidt75/go-wg-wrapper/pkg/wgwrapper"
 	serf "github.com/hashicorp/serf/serf"
 	grpc "google.golang.org/grpc"
 )
@@ -21,7 +23,7 @@ type MeshService struct {
 	CIDRRange net.IPNet
 
 	// Local mesh IP of this node
-	MeshIP net.IP
+	MeshIP net.IPNet
 
 	// Listen port for Wireguard
 	WireguardListenPort int
@@ -31,6 +33,9 @@ type MeshService struct {
 
 	// Own public key
 	WireguardPubKey string
+
+	// The interface we're controlling
+	WireguardInterface wgwrapper.WireguardInterface
 
 	// Bind Address for gRPC Mesh service
 	GrpcBindAddr string
@@ -51,5 +56,23 @@ type MeshService struct {
 func NewMeshService(meshName string) MeshService {
 	return MeshService{
 		MeshName: meshName,
+	}
+}
+
+// SetNodeName applies a name to this node
+func (ms *MeshService) SetNodeName() {
+	if len(ms.MeshIP.IP) == 16 {
+		i := int(ms.MeshIP.IP[12]) * 16777216
+		i += int(ms.MeshIP.IP[13]) * 65536
+		i += int(ms.MeshIP.IP[14]) * 256
+		i += int(ms.MeshIP.IP[15])
+		ms.NodeName = fmt.Sprintf("%s%X", ms.MeshName, i)
+	}
+	if len(ms.MeshIP.IP) == 4 {
+		i := int(ms.MeshIP.IP[0]) * 16777216
+		i += int(ms.MeshIP.IP[1]) * 65536
+		i += int(ms.MeshIP.IP[2]) * 256
+		i += int(ms.MeshIP.IP[3])
+		ms.NodeName = fmt.Sprintf("%s%X", ms.MeshName, i)
 	}
 }

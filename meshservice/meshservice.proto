@@ -5,7 +5,16 @@ package meshservice;
 option go_package = "github.com/aschmidt75/wgmesh/meshservice";
 
 service Mesh {
+    // BeginJoin begins the join process by sending a JoinRequest
+    // and receiving a JoinResponse with setup details
     rpc BeginJoin(JoinRequest) returns (JoinResponse) {}
+
+    // Peers returns a stream of all peers currently connected to the mesh
+    rpc Peers(Empty) returns (stream Peer) {}
+}
+
+message Empty {
+
 }
 
 message JoinRequest {
@@ -22,8 +31,18 @@ message JoinResponse {
     Result result = 1;
     string errorMessage = 2;
 
-    string pubkey = 3;
-    string endpointIP = 4;
-    int32 endpointPort = 5;
-    string joinerMeshIP = 6;
+    // this will be the joiner's mesh ip
+    string joinerMeshIP = 3;
+
+    // cidr of the mesh
+    string meshCidr = 4;
+}
+
+// Peer contains connection data for an individual
+// Wireguard Peer
+message Peer {
+    string pubkey = 1;              // public key
+    string endpointIP = 2;          // endpoint
+    int32 endpointPort = 3;         // endpoint
+    string meshIP = 4;              // internal mesh ip
 }

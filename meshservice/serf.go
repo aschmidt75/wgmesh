@@ -2,7 +2,9 @@ package meshservice
 
 import (
 	"errors"
+
 	"os"
+	reflect "reflect"
 	"time"
 
 	memberlist "github.com/hashicorp/memberlist"
@@ -14,7 +16,7 @@ import (
 // a bind address
 func (ms *MeshService) NewSerfCluster() {
 
-	cfg := serfCustomWANConfig(ms.NodeName, ms.MeshIP.String())
+	cfg := serfCustomWANConfig(ms.NodeName, ms.MeshIP.IP.String())
 
 	ch := make(chan serf.Event, 1)
 	go func(ch <-chan serf.Event) {
@@ -26,6 +28,8 @@ func (ms *MeshService) NewSerfCluster() {
 		}
 	}(ch)
 	cfg.EventCh = ch
+
+	cfg.LogOutput = log.StandardLogger().Out
 
 	ms.cfg = cfg
 
@@ -44,6 +48,57 @@ func (ms *MeshService) StartSerfCluster() error {
 	log.Debug("started serf cluster")
 
 	return nil
+}
+
+// JoinSerfCluster calls serf.Join, given a number of cluster nodes received from the bootstrap node
+func (ms *MeshService) JoinSerfCluster(clusterNodes []string) {
+	log.WithField("l", clusterNodes).Trace("cluster node list")
+
+	log.Debugf("Joining serf cluster via %d nodes", len(clusterNodes))
+	ms.s.Join(clusterNodes, true)
+}
+
+// StatsUpdate produces a mesh statistic update on log with severity INFO
+func (ms *MeshService) StatsUpdate() {
+}
+
+type statsContent struct {
+	numNodes int
+}
+
+func (ms *MeshService) getStats() *statsContent {
+	return &statsContent{
+		numNodes: ms.s.NumNodes(),
+	}
+}
+
+// StartStatsUpdater starts the statistics update ticker
+func (ms *MeshService) StartStatsUpdater() {
+	ticker := time.NewTicker(5000 * time.Millisecond)
+	done := make(chan bool)
+
+	var last *statsContent = nil
+
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case _ = <-ticker.C:
+				if last == nil {
+					last = ms.getStats()
+					log.Infof("Mesh has %d nodes", ms.s.NumNodes())
+				} else {
+
+					s := ms.getStats()
+					if reflect.DeepEqual(*last, *s) == false {
+						last = s
+						log.Infof("Mesh has %d nodes", ms.s.NumNodes())
+					}
+				}
+			}
+		}
+	}()
 }
 
 func serfCustomWANConfig(nodeName string, bindAddr string) *serf.Config {

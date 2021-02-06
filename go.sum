@@ -18,6 +18,12 @@ github.com/aschmidt75/go-wg-wrapper v0.1.1-0.20210202151904-6b9084892225 h1:myCZ
 github.com/aschmidt75/go-wg-wrapper v0.1.1-0.20210202151904-6b9084892225/go.mod h1:EPx7KYqBG/wCsabphNRcnzSE/+TH+9h8qUtOGSOPkCg=
 github.com/aschmidt75/go-wg-wrapper v0.1.1-0.20210202154420-46d48737ecda h1:LcPTzzWa+S4ppmicIu6y+2/DZn2+0EAM77/CANviz7s=
 github.com/aschmidt75/go-wg-wrapper v0.1.1-0.20210202154420-46d48737ecda/go.mod h1:EPx7KYqBG/wCsabphNRcnzSE/+TH+9h8qUtOGSOPkCg=
+github.com/aschmidt75/go-wg-wrapper v0.1.1-0.20210203145801-96b0eaa32b60 h1:CWFTIReNYLCuRfXzePtn9Dnj2jMpSgbR/jXkSMAgYiI=
+github.com/aschmidt75/go-wg-wrapper v0.1.1-0.20210203145801-96b0eaa32b60/go.mod h1:EPx7KYqBG/wCsabphNRcnzSE/+TH+9h8qUtOGSOPkCg=
+github.com/aschmidt75/go-wg-wrapper v0.1.1-0.20210205100931-ddd2c2b8d0bc h1:t8q923i+nGL3ylqQjKBu9X3dmqdSXF9CGVoAXr3x88s=
+github.com/aschmidt75/go-wg-wrapper v0.1.1-0.20210205100931-ddd2c2b8d0bc/go.mod h1:EPx7KYqBG/wCsabphNRcnzSE/+TH+9h8qUtOGSOPkCg=
+github.com/aschmidt75/go-wg-wrapper v0.1.1-0.20210206151906-a540c071fbf8 h1:xmEcCGgB+i1omuYNotYbCUTQKf/z57urEW+9cnhBhNc=
+github.com/aschmidt75/go-wg-wrapper v0.1.1-0.20210206151906-a540c071fbf8/go.mod h1:EPx7KYqBG/wCsabphNRcnzSE/+TH+9h8qUtOGSOPkCg=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=

@@ -18,7 +18,11 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MeshClient interface {
+	// BeginJoin begins the join process by sending a JoinRequest
+	// and receiving a JoinResponse with setup details
 	BeginJoin(ctx context.Context, in *JoinRequest, opts ...grpc.CallOption) (*JoinResponse, error)
+	// Peers returns a stream of all peers currently connected to the mesh
+	Peers(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Mesh_PeersClient, error)
 }
 
 type meshClient struct {
@@ -38,11 +42,47 @@ func (c *meshClient) BeginJoin(ctx context.Context, in *JoinRequest, opts ...grp
 	return out, nil
 }
 
+func (c *meshClient) Peers(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Mesh_PeersClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Mesh_ServiceDesc.Streams[0], "/meshservice.Mesh/Peers", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &meshPeersClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Mesh_PeersClient interface {
+	Recv() (*Peer, error)
+	grpc.ClientStream
+}
+
+type meshPeersClient struct {
+	grpc.ClientStream
+}
+
+func (x *meshPeersClient) Recv() (*Peer, error) {
+	m := new(Peer)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // MeshServer is the server API for Mesh service.
 // All implementations must embed UnimplementedMeshServer
 // for forward compatibility
 type MeshServer interface {
+	// BeginJoin begins the join process by sending a JoinRequest
+	// and receiving a JoinResponse with setup details
 	BeginJoin(context.Context, *JoinRequest) (*JoinResponse, error)
+	// Peers returns a stream of all peers currently connected to the mesh
+	Peers(*Empty, Mesh_PeersServer) error
 	mustEmbedUnimplementedMeshServer()
 }
 
@@ -52,6 +92,9 @@ type UnimplementedMeshServer struct {
 
 func (UnimplementedMeshServer) BeginJoin(context.Context, *JoinRequest) (*JoinResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BeginJoin not implemented")
+}
+func (UnimplementedMeshServer) Peers(*Empty, Mesh_PeersServer) error {
+	return status.Errorf(codes.Unimplemented, "method Peers not implemented")
 }
 func (UnimplementedMeshServer) mustEmbedUnimplementedMeshServer() {}
 
@@ -84,6 +127,27 @@ func _Mesh_BeginJoin_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Mesh_Peers_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(Empty)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(MeshServer).Peers(m, &meshPeersServer{stream})
+}
+
+type Mesh_PeersServer interface {
+	Send(*Peer) error
+	grpc.ServerStream
+}
+
+type meshPeersServer struct {
+	grpc.ServerStream
+}
+
+func (x *meshPeersServer) Send(m *Peer) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // Mesh_ServiceDesc is the grpc.ServiceDesc for Mesh service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -96,6 +160,12 @@ var Mesh_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Mesh_BeginJoin_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Peers",
+			Handler:       _Mesh_Peers_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "meshservice.proto",
 }
