@@ -17,14 +17,15 @@ import (
 type BootstrapCommand struct {
 	CommandDefaults
 
-	fs           *flag.FlagSet
-	meshName     string
-	cidrRange    string
-	ip           string
-	wgListenAddr string
-	wgListenPort int
-	grpcBindAddr string
-	grpcBindPort int
+	fs             *flag.FlagSet
+	meshName       string
+	cidrRange      string
+	ip             string
+	wgListenAddr   string
+	wgListenPort   int
+	grpcBindAddr   string
+	grpcBindPort   int
+	memberListFile string
 }
 
 // NewBootstrapCommand creates the Bootstrap Command
@@ -39,6 +40,7 @@ func NewBootstrapCommand() *BootstrapCommand {
 		wgListenPort:    54540,
 		grpcBindAddr:    "0.0.0.0",
 		grpcBindPort:    5000,
+		memberListFile:  "",
 	}
 
 	c.fs.StringVar(&c.meshName, "name", c.meshName, "name of the mesh network")
@@ -49,6 +51,7 @@ func NewBootstrapCommand() *BootstrapCommand {
 	c.fs.IntVar(&c.wgListenPort, "listen-port", c.wgListenPort, "set the (external) wireguard listen port")
 	c.fs.StringVar(&c.grpcBindAddr, "grpc-bind-addr", c.grpcBindAddr, "(public) address to bind grpc mesh service to")
 	c.fs.IntVar(&c.grpcBindPort, "grpc-bind-port", c.grpcBindPort, "port to bind grpc mesh service to")
+	c.fs.StringVar(&c.memberListFile, "memberlist-file", c.memberListFile, "optional name of file for a log of all current mesh members")
 	c.DefaultFields(c.fs)
 
 	return c
@@ -91,10 +94,6 @@ func (g *BootstrapCommand) Init(args []string) error {
 		return fmt.Errorf("%d is not valid for -listen-port", g.wgListenPort)
 	}
 
-	if net.ParseIP(g.wgListenAddr) == nil {
-		return fmt.Errorf("%s is not a valid ip for -listen-addr", g.wgListenAddr)
-	}
-
 	if net.ParseIP(g.grpcBindAddr) == nil {
 		return fmt.Errorf("%s is not a valid ip for -grpc-bind-addr", g.grpcBindAddr)
 	}
@@ -113,16 +112,17 @@ func (g *BootstrapCommand) Run() error {
 		"Running cli command",
 	)
 
+	ms := meshservice.NewMeshService(g.meshName)
+	log.WithField("ms", ms).Trace(
+		"created",
+	)
+	ms.SetMemberlistExportFile(g.memberListFile)
+
 	wgListenAddr := getIPFromIPOrIntfParam(g.wgListenAddr)
 	log.WithField("ip", wgListenAddr).Trace("parsed -listen-addr")
 	if wgListenAddr == nil {
 		return errors.New("need -listen-addr as IP address or interface name")
 	}
-
-	ms := meshservice.NewMeshService(g.meshName)
-	log.WithField("ms", ms).Trace(
-		"created",
-	)
 
 	_, cidrRangeIpnet, err := net.ParseCIDR(g.cidrRange)
 	if err != nil {

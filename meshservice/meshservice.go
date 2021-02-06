@@ -47,6 +47,9 @@ type MeshService struct {
 	cfg *serf.Config
 	s   *serf.Serf
 
+	// if set, exports the serf member list to this file
+	memberExportFile string
+
 	// gRPC
 	UnimplementedMeshServer
 	grpcServer *grpc.Server

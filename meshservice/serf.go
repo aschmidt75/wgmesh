@@ -1,7 +1,9 @@
 package meshservice
 
 import (
+	"encoding/json"
 	"errors"
+	"io/ioutil"
 
 	"os"
 	reflect "reflect"
@@ -72,9 +74,46 @@ func (ms *MeshService) getStats() *statsContent {
 	}
 }
 
+// SetMemberlistExportFile sets the file name for an export
+// of the current memberlist. If empty no file is written
+func (ms *MeshService) SetMemberlistExportFile(f string) {
+	ms.memberExportFile = f
+}
+
+type exportedMember struct {
+	Addr   string `json:"addr"`
+	Status string `json:"st"`
+}
+type exportedMemberList struct {
+	Members    map[string]exportedMember `json:"members"`
+	LastUpdate time.Time                 `json:"lastUpdate"`
+}
+
+func (ms *MeshService) updateMemberExport() {
+	e := &exportedMemberList{
+		Members:    make(map[string]exportedMember),
+		LastUpdate: time.Now(),
+	}
+	for _, member := range ms.s.Members() {
+		e.Members[member.Name] = exportedMember{
+			Addr:   member.Addr.String(),
+			Status: member.Status.String(),
+		}
+	}
+
+	content, err := json.MarshalIndent(e, "", " ")
+	if err != nil {
+		log.WithError(err).Error("unable to write to file")
+	}
+
+	err = ioutil.WriteFile(ms.memberExportFile, content, 0640)
+}
+
 // StartStatsUpdater starts the statistics update ticker
 func (ms *MeshService) StartStatsUpdater() {
-	ticker := time.NewTicker(5000 * time.Millisecond)
+
+	// TODO make configurable
+	ticker := time.NewTicker(1000 * time.Millisecond)
 	done := make(chan bool)
 
 	var last *statsContent = nil
@@ -85,6 +124,10 @@ func (ms *MeshService) StartStatsUpdater() {
 			case <-done:
 				return
 			case _ = <-ticker.C:
+				if ms.memberExportFile != "" {
+					ms.updateMemberExport()
+				}
+
 				if last == nil {
 					last = ms.getStats()
 					log.Infof("Mesh has %d nodes", ms.s.NumNodes())

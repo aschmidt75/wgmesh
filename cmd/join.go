@@ -8,6 +8,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,11 +23,12 @@ import (
 type JoinCommand struct {
 	CommandDefaults
 
-	fs         *flag.FlagSet
-	meshName   string
-	endpoint   string
-	listenPort int
-	listenIP   string
+	fs             *flag.FlagSet
+	meshName       string
+	endpoint       string
+	listenPort     int
+	listenIP       string
+	memberListFile string
 }
 
 // NewJoinCommand creates the Join Command
@@ -36,6 +39,7 @@ func NewJoinCommand() *JoinCommand {
 		meshName:        "",
 		endpoint:        "",
 		listenPort:      54540,
+		memberListFile:  "",
 	}
 
 	c.fs.StringVar(&c.meshName, "name", c.meshName, "name of the mesh network")
@@ -43,6 +47,7 @@ func NewJoinCommand() *JoinCommand {
 	c.fs.StringVar(&c.endpoint, "bootstrap-addr", c.endpoint, "IP:Port of remote mesh bootstrap node")
 	c.fs.IntVar(&c.listenPort, "listen-port", c.listenPort, "set the (external) wireguard listen port")
 	c.fs.StringVar(&c.listenIP, "listen-addr", c.listenIP, "set the (external) wireguard listen IP. May be an IP adress, or an interface name (e.g. eth0) or a numbered address on an interface (e.g. eth0%1)")
+	c.fs.StringVar(&c.memberListFile, "memberlist-file", c.memberListFile, "optional name of file for a log of all current mesh members")
 	c.DefaultFields(c.fs)
 
 	return c
@@ -68,16 +73,20 @@ func (g *JoinCommand) Init(args []string) error {
 		return errors.New("mesh name (--name, -n) must have maximum length of 10")
 	}
 
-	if net.ParseIP(g.endpoint) == nil {
-		return fmt.Errorf("%s is not a valid ip for -bootstrap-addr", g.endpoint)
+	arr := strings.Split(g.endpoint, ":")
+	if len(arr) != 2 {
+		return errors.New("-bootstrap-addr must be <IP>:<port>")
+	}
+	if net.ParseIP(arr[0]) == nil {
+		return fmt.Errorf("%s is not a valid ip for -bootstrap-addr", arr[0])
+	}
+	_, err = strconv.Atoi(arr[1])
+	if err != nil {
+		return fmt.Errorf("%s is not a valid port for -bootstrap-addr", arr[1])
 	}
 
 	if g.listenPort < 0 || g.listenPort > 65535 {
 		return fmt.Errorf("%d is not valid for -listen-port", g.listenPort)
-	}
-
-	if net.ParseIP(g.listenIP) == nil {
-		return fmt.Errorf("%s is not a valid ip for -listen-addr", g.listenIP)
 	}
 
 	return nil
@@ -101,6 +110,7 @@ func (g *JoinCommand) Run() error {
 		"created",
 	)
 	ms.WireguardListenIP = listenIP
+	ms.SetMemberlistExportFile(g.memberListFile)
 
 	pk, err := ms.CreateWireguardInterface(g.listenPort)
 	if err != nil {
