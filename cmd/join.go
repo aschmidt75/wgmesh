@@ -131,7 +131,7 @@ func (g *JoinCommand) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	joinResponse, err := service.BeginJoin(context.Background(), &meshservice.JoinRequest{
+	joinResponse, err := service.Join(context.Background(), &meshservice.JoinRequest{
 		Pubkey:       ms.WireguardPubKey,
 		EndpointIP:   listenIP.String(),
 		EndpointPort: int32(g.listenPort),
@@ -211,12 +211,13 @@ func (g *JoinCommand) Run() error {
 	// start the serf part
 	ms.NewSerfCluster()
 
-	err = ms.StartSerfCluster()
+	err = ms.StartSerfCluster(false, ms.WireguardPubKey, listenIP.String(), g.listenPort, ms.MeshIP.IP.String())
 	if err != nil {
 		return err
 	}
 
 	ms.StartStatsUpdater()
+	memberWatcherStopCh := ms.StartMemberWatcher()
 
 	// join the cluster
 	ms.JoinSerfCluster(meshIPs)
@@ -236,6 +237,10 @@ func (g *JoinCommand) Run() error {
 	<-stopCh
 
 	// take everything down
+	ms.LeaveSerfCluster()
+
+	memberWatcherStopCh <- true
+
 	err = ms.RemoveWireguardInterfaceForMesh()
 	if err != nil {
 		return err

@@ -20,7 +20,7 @@ const _ = grpc.SupportPackageIsVersion7
 type MeshClient interface {
 	// BeginJoin begins the join process by sending a JoinRequest
 	// and receiving a JoinResponse with setup details
-	BeginJoin(ctx context.Context, in *JoinRequest, opts ...grpc.CallOption) (*JoinResponse, error)
+	Join(ctx context.Context, in *JoinRequest, opts ...grpc.CallOption) (*JoinResponse, error)
 	// Peers returns a stream of all peers currently connected to the mesh
 	Peers(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Mesh_PeersClient, error)
 }
@@ -33,9 +33,9 @@ func NewMeshClient(cc grpc.ClientConnInterface) MeshClient {
 	return &meshClient{cc}
 }
 
-func (c *meshClient) BeginJoin(ctx context.Context, in *JoinRequest, opts ...grpc.CallOption) (*JoinResponse, error) {
+func (c *meshClient) Join(ctx context.Context, in *JoinRequest, opts ...grpc.CallOption) (*JoinResponse, error) {
 	out := new(JoinResponse)
-	err := c.cc.Invoke(ctx, "/meshservice.Mesh/BeginJoin", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/meshservice.Mesh/Join", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (x *meshPeersClient) Recv() (*Peer, error) {
 type MeshServer interface {
 	// BeginJoin begins the join process by sending a JoinRequest
 	// and receiving a JoinResponse with setup details
-	BeginJoin(context.Context, *JoinRequest) (*JoinResponse, error)
+	Join(context.Context, *JoinRequest) (*JoinResponse, error)
 	// Peers returns a stream of all peers currently connected to the mesh
 	Peers(*Empty, Mesh_PeersServer) error
 	mustEmbedUnimplementedMeshServer()
@@ -90,8 +90,8 @@ type MeshServer interface {
 type UnimplementedMeshServer struct {
 }
 
-func (UnimplementedMeshServer) BeginJoin(context.Context, *JoinRequest) (*JoinResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method BeginJoin not implemented")
+func (UnimplementedMeshServer) Join(context.Context, *JoinRequest) (*JoinResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Join not implemented")
 }
 func (UnimplementedMeshServer) Peers(*Empty, Mesh_PeersServer) error {
 	return status.Errorf(codes.Unimplemented, "method Peers not implemented")
@@ -109,20 +109,20 @@ func RegisterMeshServer(s grpc.ServiceRegistrar, srv MeshServer) {
 	s.RegisterService(&Mesh_ServiceDesc, srv)
 }
 
-func _Mesh_BeginJoin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Mesh_Join_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(JoinRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MeshServer).BeginJoin(ctx, in)
+		return srv.(MeshServer).Join(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/meshservice.Mesh/BeginJoin",
+		FullMethod: "/meshservice.Mesh/Join",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MeshServer).BeginJoin(ctx, req.(*JoinRequest))
+		return srv.(MeshServer).Join(ctx, req.(*JoinRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -156,8 +156,8 @@ var Mesh_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*MeshServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "BeginJoin",
-			Handler:    _Mesh_BeginJoin_Handler,
+			MethodName: "Join",
+			Handler:    _Mesh_Join_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

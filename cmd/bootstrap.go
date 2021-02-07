@@ -161,12 +161,13 @@ func (g *BootstrapCommand) Run() error {
 	// create and start the serf cluster
 	ms.NewSerfCluster()
 
-	err = ms.StartSerfCluster()
+	err = ms.StartSerfCluster(true, pk, wgListenAddr.String(), g.wgListenPort, ms.MeshIP.IP.String())
 	if err != nil {
 		return err
 	}
 
 	ms.StartStatsUpdater()
+	memberWatcherStopCh := ms.StartMemberWatcher()
 
 	// set up grpc mesh service
 	ms.GrpcBindAddr = g.grpcBindAddr
@@ -195,6 +196,9 @@ func (g *BootstrapCommand) Run() error {
 	<-stopCh
 
 	// take everything down
+	ms.LeaveSerfCluster()
+
+	memberWatcherStopCh <- true
 
 	ms.StopGrpcService()
 
@@ -202,6 +206,8 @@ func (g *BootstrapCommand) Run() error {
 	if err != nil {
 		return err
 	}
+
+	// TODO delete memberlist-file
 
 	return nil
 }

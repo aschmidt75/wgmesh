@@ -6,20 +6,29 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"strconv"
 
 	wgwrapper "github.com/aschmidt75/go-wg-wrapper/pkg/wgwrapper"
 	log "github.com/sirupsen/logrus"
 	grpc "google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
-// BeginJoin allows other nodes to join by sending a JoinRequest
-func (ms *MeshService) BeginJoin(ctx context.Context, req *JoinRequest) (*JoinResponse, error) {
+// Join allows other nodes to join by sending a JoinRequest
+func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinResponse, error) {
 
 	log.WithField("req", req).Trace("Got join request")
 
 	// choose a random ip adress from the adress pool of this node
 	// which has not been used before
-	mip, _ := newIPInNet(ms.CIDRRange)
+	var mip net.IP
+	for {
+		mip, _ = newIPInNet(ms.CIDRRange)
+
+		if ms.isIPAvailable(mip) {
+			break
+		}
+	}
 
 	targetWGIP := net.IPNet{
 		mip,
@@ -56,6 +65,20 @@ func (ms *MeshService) BeginJoin(ctx context.Context, req *JoinRequest) (*JoinRe
 		}, nil
 	}
 
+	// send out a Peer Update as message to all serf nodes
+	peerAnnouncementBuf, _ := proto.Marshal(&Peer{
+		Type:         Peer_JOIN,
+		Pubkey:       req.Pubkey,
+		EndpointIP:   req.EndpointIP,
+		EndpointPort: int32(req.EndpointPort),
+		MeshIP:       targetWGIP.IP.String(),
+	})
+	log.WithField("len", len(peerAnnouncementBuf)).Trace("peerAnnouncement protobuf len")
+
+	//
+	ms.s.UserEvent("j", []byte(peerAnnouncementBuf), true)
+
+	// return successful join response to client
 	return &JoinResponse{
 		Result:       JoinResponse_OK,
 		ErrorMessage: "",
@@ -64,16 +87,25 @@ func (ms *MeshService) BeginJoin(ctx context.Context, req *JoinRequest) (*JoinRe
 	}, nil
 }
 
-// Peers serves a list of all current peers, starting with this node
+// Peers serves a list of all current peers, starting with this node.
+// All data is derived from serf's memberlist
 func (ms *MeshService) Peers(e *Empty, stream Mesh_PeersServer) error {
-	err := stream.Send(&Peer{
-		Pubkey:       ms.WireguardPubKey,
-		EndpointIP:   ms.WireguardListenIP.String(),
-		EndpointPort: int32(ms.WireguardListenPort),
-		MeshIP:       ms.MeshIP.IP.String(),
-	})
+	for _, member := range ms.s.Members() {
+		t := member.Tags
+		port, _ := strconv.Atoi(t["port"])
+		err := stream.Send(&Peer{
+			Pubkey:       t["pk"],
+			EndpointIP:   t["addr"],
+			EndpointPort: int32(port),
+			MeshIP:       t["i"],
+			Type:         Peer_JOIN,
+		})
+		if err != nil {
+			return err
+		}
+	}
 
-	return err
+	return nil
 }
 
 func newIPInNet(ipnet net.IPNet) (net.IP, error) {
@@ -125,7 +157,20 @@ func (ms *MeshService) StartGrpcService() error {
 // StopGrpcService ...
 func (ms *MeshService) StopGrpcService() {
 
-	log.Info("Stopping gRPC mesh service")
+	log.Debug("Stopping gRPC mesh service")
 	ms.grpcServer.GracefulStop()
 	log.Info("Stopped gRPC mesh service")
+}
+
+func (ms *MeshService) isIPAvailable(ip net.IP) bool {
+	s := ip.String()
+
+	for _, member := range ms.s.Members() {
+		wgIP := member.Tags["addr"]
+		if wgIP == s {
+			return false
+		}
+	}
+
+	return true
 }
