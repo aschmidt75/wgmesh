@@ -17,30 +17,34 @@ import (
 type BootstrapCommand struct {
 	CommandDefaults
 
-	fs             *flag.FlagSet
-	meshName       string
-	cidrRange      string
-	ip             string
-	wgListenAddr   string
-	wgListenPort   int
-	grpcBindAddr   string
-	grpcBindPort   int
-	memberListFile string
+	fs                *flag.FlagSet
+	meshName          string
+	cidrRange         string
+	ip                string
+	wgListenAddr      string
+	wgListenPort      int
+	grpcBindAddr      string
+	grpcBindPort      int
+	memberListFile    string
+	agentGrpcBindAddr string
+	agentGrpcBindPort int
 }
 
 // NewBootstrapCommand creates the Bootstrap Command
 func NewBootstrapCommand() *BootstrapCommand {
 	c := &BootstrapCommand{
-		CommandDefaults: NewCommandDefaults(),
-		fs:              flag.NewFlagSet("bootstrap", flag.ContinueOnError),
-		meshName:        "",
-		cidrRange:       "10.232.0.0/16",
-		ip:              "10.232.1.1",
-		wgListenAddr:    "",
-		wgListenPort:    54540,
-		grpcBindAddr:    "0.0.0.0",
-		grpcBindPort:    5000,
-		memberListFile:  "",
+		CommandDefaults:   NewCommandDefaults(),
+		fs:                flag.NewFlagSet("bootstrap", flag.ContinueOnError),
+		meshName:          "",
+		cidrRange:         "10.232.0.0/16",
+		ip:                "10.232.1.1",
+		wgListenAddr:      "",
+		wgListenPort:      54540,
+		grpcBindAddr:      "0.0.0.0",
+		grpcBindPort:      5000,
+		agentGrpcBindAddr: "127.0.0.1",
+		agentGrpcBindPort: 5001,
+		memberListFile:    "",
 	}
 
 	c.fs.StringVar(&c.meshName, "name", c.meshName, "name of the mesh network")
@@ -51,6 +55,8 @@ func NewBootstrapCommand() *BootstrapCommand {
 	c.fs.IntVar(&c.wgListenPort, "listen-port", c.wgListenPort, "set the (external) wireguard listen port")
 	c.fs.StringVar(&c.grpcBindAddr, "grpc-bind-addr", c.grpcBindAddr, "(public) address to bind grpc mesh service to")
 	c.fs.IntVar(&c.grpcBindPort, "grpc-bind-port", c.grpcBindPort, "port to bind grpc mesh service to")
+	c.fs.StringVar(&c.agentGrpcBindAddr, "agent-grpc-bind-addr", c.agentGrpcBindAddr, "(private) address to bind local agent service to")
+	c.fs.IntVar(&c.agentGrpcBindPort, "agent-grpc-bind-port", c.agentGrpcBindPort, "port to bind local agent service to")
 	c.fs.StringVar(&c.memberListFile, "memberlist-file", c.memberListFile, "optional name of file for a log of all current mesh members")
 	c.DefaultFields(c.fs)
 
@@ -102,6 +108,14 @@ func (g *BootstrapCommand) Init(args []string) error {
 		return fmt.Errorf("%d is not valid for -grpc-bind-port", g.grpcBindPort)
 	}
 
+	if net.ParseIP(g.agentGrpcBindAddr) == nil {
+		return fmt.Errorf("%s is not a valid ip for -agent-grpc-bind-addr", g.agentGrpcBindAddr)
+	}
+
+	if g.agentGrpcBindPort < 0 || g.agentGrpcBindPort > 65535 {
+		return fmt.Errorf("%d is not valid for -agent-grpc-bind-port", g.agentGrpcBindPort)
+	}
+
 	return nil
 }
 
@@ -139,13 +153,36 @@ func (g *BootstrapCommand) Run() error {
 	}
 	log.WithField("meship", ms.MeshIP).Trace("using mesh ip")
 
-	ms.SetNodeName()
-
-	// From the given IP and listen port, create the wireguard interface
-	// and set up a basic configuration for it. Up the interface
-	pk, err := ms.CreateWireguardInterfaceForMesh(g.ip, g.wgListenPort)
+	pk, err := g.wireguardSetup(&ms, wgListenAddr)
 	if err != nil {
 		return err
+	}
+
+	err = g.serfSetup(&ms, pk, wgListenAddr)
+	if err != nil {
+		return err
+	}
+
+	if err = g.grpcSetup(&ms); err != nil {
+		return err
+	}
+
+	g.wait()
+
+	if err = g.cleanUp(&ms); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// wireguardSetup ...
+func (g *BootstrapCommand) wireguardSetup(ms *meshservice.MeshService, wgListenAddr net.IP) (pk string, err error) {
+	// From the given IP and listen port, create the wireguard interface
+	// and set up a basic configuration for it. Up the interface
+	pk, err = ms.CreateWireguardInterfaceForMesh(g.ip, g.wgListenPort)
+	if err != nil {
+		return "", err
 	}
 	ms.WireguardPubKey = pk
 	ms.WireguardListenPort = g.wgListenPort
@@ -155,9 +192,16 @@ func (g *BootstrapCommand) Run() error {
 	// goes to the wireguard interface.
 	err = ms.SetRoute()
 	if err != nil {
-		return err
+		return "", err
 	}
 
+	ms.SetNodeName()
+
+	return pk, nil
+}
+
+// SerfSetup ...
+func (g *BootstrapCommand) serfSetup(ms *meshservice.MeshService, pk string, wgListenAddr net.IP) (err error) {
 	// create and start the serf cluster
 	ms.NewSerfCluster()
 
@@ -167,7 +211,12 @@ func (g *BootstrapCommand) Run() error {
 	}
 
 	ms.StartStatsUpdater()
-	memberWatcherStopCh := ms.StartMemberWatcher()
+
+	return nil
+}
+
+// GrpcSetup ...
+func (g *BootstrapCommand) grpcSetup(ms *meshservice.MeshService) (err error) {
 
 	// set up grpc mesh service
 	ms.GrpcBindAddr = g.grpcBindAddr
@@ -181,7 +230,23 @@ func (g *BootstrapCommand) Run() error {
 		}
 	}()
 
-	// wait until being stopped
+	// start the local agent
+	ms.MeshAgentServer = meshservice.NewMeshAgentServer(ms, g.agentGrpcBindAddr, g.agentGrpcBindPort)
+	log.WithField("mas", ms.MeshAgentServer).Trace("agent")
+	go func() {
+		log.Infof("Starting gRPC Agent Service at %s:%d", g.agentGrpcBindAddr, g.agentGrpcBindPort)
+		err = ms.MeshAgentServer.StartAgentGrpcService()
+		if err != nil {
+			log.Error(err)
+		}
+	}()
+
+	return nil
+}
+
+// waits until being stopped
+func (g *BootstrapCommand) wait() {
+
 	stopCh := make(chan struct{})
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc,
@@ -194,20 +259,24 @@ func (g *BootstrapCommand) Run() error {
 	}()
 
 	<-stopCh
+}
 
+// CleanUp ..
+func (g *BootstrapCommand) cleanUp(ms *meshservice.MeshService) error {
 	// take everything down
-	ms.LeaveSerfCluster()
+	ms.MeshAgentServer.StopAgentGrpcService()
 
-	memberWatcherStopCh <- true
+	ms.LeaveSerfCluster()
 
 	ms.StopGrpcService()
 
-	err = ms.RemoveWireguardInterfaceForMesh()
+	// delete memberlist-file
+	os.Remove(g.memberListFile)
+
+	err := ms.RemoveWireguardInterfaceForMesh()
 	if err != nil {
 		return err
 	}
-
-	// TODO delete memberlist-file
 
 	return nil
 }

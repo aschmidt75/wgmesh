@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	ioutil "io/ioutil"
 	"net"
 
 	"os"
@@ -18,6 +18,100 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// parses the user event as a Peer announcement and adds the peer
+// to the wireguard interface
+func (ms *MeshService) serfHandleJoinRequestEvent(userEv serf.UserEvent) {
+	peerAnnouncement := &Peer{}
+	err := proto.Unmarshal(userEv.Payload, peerAnnouncement)
+	if err != nil {
+		log.WithError(err).Error("unable to unmarshal a user event")
+	}
+	log.WithField("pa", peerAnnouncement).Trace("user event: peerAnnouncement")
+
+	if peerAnnouncement.Type == Peer_JOIN {
+		wg := wgwrapper.New()
+		ok, err := wg.AddPeer(ms.WireguardInterface, wgwrapper.WireguardPeer{
+			RemoteEndpointIP: peerAnnouncement.EndpointIP,
+			ListenPort:       int(peerAnnouncement.EndpointPort),
+			Pubkey:           peerAnnouncement.Pubkey,
+			AllowedIPs: []net.IPNet{
+				net.IPNet{
+					IP:   net.ParseIP(peerAnnouncement.MeshIP),
+					Mask: net.CIDRMask(32, 32),
+				},
+			},
+		})
+
+		log.WithField("ok", ok).Trace("1")
+		log.WithField("err", err).Trace("1")
+
+		if err != nil {
+			log.WithError(err).Error("unable to add peer after user event")
+		} else {
+			if ok {
+				log.WithFields(log.Fields{
+					"pk": peerAnnouncement.Pubkey,
+					"ip": peerAnnouncement.MeshIP,
+				}).Info("added peer")
+			} else {
+				// if we're a bootstrap node then this peer has already been added
+				// by the grpc join request function.
+			}
+		}
+	}
+}
+
+func (ms *MeshService) serfEventHandler(ch <-chan serf.Event) {
+	for {
+		select {
+		case ev := <-ch:
+			if ev.EventType() == serf.EventUser {
+				userEv := ev.(serf.UserEvent)
+
+				if userEv.Name == "j" {
+					log.WithField("ev", ev).Debug("received join request event")
+					ms.serfHandleJoinRequestEvent(userEv)
+				}
+
+			}
+
+			if ev.EventType() == serf.EventMemberJoin {
+				evJoin := ev.(serf.MemberEvent)
+
+				log.WithField("members", evJoin.Members).Debug("received join event")
+			}
+			if ev.EventType() == serf.EventMemberLeave || ev.EventType() == serf.EventMemberFailed || ev.EventType() == serf.EventMemberReap {
+				evJoin := ev.(serf.MemberEvent)
+
+				log.WithField("members", evJoin.Members).Debug("received leave/failed event")
+
+				for _, member := range evJoin.Members {
+					// remove this peer from wireguard interface
+					wg := wgwrapper.New()
+
+					err := wg.RemovePeerByPubkey(ms.WireguardInterface, member.Tags["pk"])
+					if err != nil {
+						log.WithError(err).Error("unable to remove failed/left wireguard peer")
+					}
+
+					err = ms.s.RemoveFailedNodePrune(member.Name)
+					if err != nil {
+						log.WithError(err).Error("unable to remove failed/left serf node")
+					} else {
+						log.WithFields(log.Fields{
+							"node": member.Name,
+							"ip":   member.Addr.String(),
+						}).Info("node left mesh")
+					}
+
+				}
+
+			}
+
+		}
+	}
+}
+
 // NewSerfCluster sets up a cluster with a given nodeName,
 // a bind address. it also registers a user event listener
 // which acts upon Join and Leave user messages
@@ -25,53 +119,20 @@ func (ms *MeshService) NewSerfCluster() {
 
 	cfg := serfCustomWANConfig(ms.NodeName, ms.MeshIP.IP.String())
 
+	// set up the event handler for all user events
 	ch := make(chan serf.Event, 1)
-	go func(ch <-chan serf.Event) {
-		for {
-			select {
-			case ev := <-ch:
-				log.WithField("ev", ev).Debug("received event")
-
-				if ev.EventType() == serf.EventUser {
-					userEv := ev.(serf.UserEvent)
-
-					peerAnnouncement := &Peer{}
-					err := proto.Unmarshal(userEv.Payload, peerAnnouncement)
-					if err != nil {
-						log.WithError(err).Error("unable to unmarshal a user event")
-					}
-					log.WithField("pa", peerAnnouncement).Trace("user event: peerAnnouncement")
-
-					if peerAnnouncement.Type == Peer_JOIN {
-						wg := wgwrapper.New()
-						ok, err := wg.AddPeer(ms.WireguardInterface, wgwrapper.WireguardPeer{
-							RemoteEndpointIP: peerAnnouncement.EndpointIP,
-							ListenPort:       int(peerAnnouncement.EndpointPort),
-							Pubkey:           peerAnnouncement.Pubkey,
-							AllowedIPs: []net.IPNet{
-								net.IPNet{
-									IP:   net.ParseIP(peerAnnouncement.MeshIP),
-									Mask: net.CIDRMask(32, 32),
-								},
-							},
-						})
-
-						if err != nil {
-							log.WithError(err).Error("unable to add peer after user event")
-						} else {
-							if ok {
-								log.WithField("pk", peerAnnouncement.Pubkey).Info("added peer")
-							}
-						}
-					}
-
-				}
-			}
-		}
-	}(ch)
+	go ms.serfEventHandler(ch)
 	cfg.EventCh = ch
 
-	cfg.LogOutput = log.StandardLogger().Out
+	if log.GetLevel() == log.TraceLevel {
+		log.Trace("enabling serf log output")
+		cfg.LogOutput = log.StandardLogger().Out
+	} else {
+		cfg.LogOutput = ioutil.Discard
+	}
+	cfg.MemberlistConfig.LogOutput = cfg.LogOutput
+
+	// @TODO cfg.MemberlistConfig.SecretKey = ...
 
 	ms.cfg = cfg
 
@@ -118,11 +179,17 @@ func (ms *MeshService) JoinSerfCluster(clusterNodes []string) {
 // LeaveSerfCluster leaves the cluster
 func (ms *MeshService) LeaveSerfCluster() {
 	ms.s.Leave()
+
+	time.Sleep(5 * time.Second)
 	log.Info("Left the serf cluster")
+
+	ms.s.Shutdown()
+	log.Debug("Shut down the serf instance")
 }
 
-// StatsUpdate produces a mesh statistic update on log with severity INFO
+// StatsUpdate produces a mesh statistic update on log
 func (ms *MeshService) StatsUpdate() {
+	log.WithField("stats", ms.s.Stats()).Debug("serf cluster statistics")
 }
 
 type statsContent struct {
@@ -144,6 +211,7 @@ func (ms *MeshService) SetMemberlistExportFile(f string) {
 type exportedMember struct {
 	Addr   string            `json:"addr"`
 	Status string            `json:"st"`
+	RTT    int64             `json:"rtt"`
 	Tags   map[string]string `json:"tags"`
 }
 type exportedMemberList struct {
@@ -156,12 +224,28 @@ func (ms *MeshService) updateMemberExport() {
 		Members:    make(map[string]exportedMember),
 		LastUpdate: time.Now(),
 	}
+	myCoord, err := ms.s.GetCoordinate()
+	if err != nil {
+		log.WithError(err).Warn("Unable to get my own coordinate, check config")
+		myCoord = nil
+	}
 	for _, member := range ms.s.Members() {
-		e.Members[member.Name] = exportedMember{
+		em := exportedMember{
 			Addr:   member.Addr.String(),
 			Status: member.Status.String(),
 			Tags:   member.Tags,
 		}
+		// compute RTT if we have all distances
+		memberCoord, ok := ms.s.GetCachedCoordinate(member.Name)
+		if ok && memberCoord != nil {
+			d := memberCoord.DistanceTo(myCoord)
+			em.RTT = int64(d / time.Millisecond)
+
+			// TODO: for LAN mode add Microseconds as well
+		}
+
+		//
+		e.Members[member.Name] = em
 	}
 
 	content, err := json.MarshalIndent(e, "", " ")
@@ -176,17 +260,19 @@ func (ms *MeshService) updateMemberExport() {
 func (ms *MeshService) StartStatsUpdater() {
 
 	// TODO make configurable
-	ticker := time.NewTicker(1000 * time.Millisecond)
+	ticker1 := time.NewTicker(1000 * time.Millisecond)
+	ticker2 := time.NewTicker(60 * time.Second)
 	done := make(chan bool)
 
 	var last *statsContent = nil
 
+	// The first update dumps the node count only when it changes
 	go func() {
 		for {
 			select {
 			case <-done:
 				return
-			case _ = <-ticker.C:
+			case _ = <-ticker1.C:
 				if ms.memberExportFile != "" {
 					ms.updateMemberExport()
 				}
@@ -205,45 +291,18 @@ func (ms *MeshService) StartStatsUpdater() {
 			}
 		}
 	}()
-}
 
-// StartMemberWatcher starts a watcher on failed/leave events
-func (ms *MeshService) StartMemberWatcher() chan bool {
-
-	// TODO make configurable
-	ticker := time.NewTicker(1000 * time.Millisecond)
-	done := make(chan bool)
-
+	// the seconds update dumps serf stats on trace
 	go func() {
 		for {
 			select {
 			case <-done:
 				return
-			case _ = <-ticker.C:
-				for _, member := range ms.s.Members() {
-					if member.Status == serf.StatusFailed || member.Status == serf.StatusLeft {
-						log.WithField("node", member.Name).Info("Removing failed/left node")
-
-						// remove this peer from wireguard interface
-						wg := wgwrapper.New()
-						err := wg.RemovePeerByPubkey(ms.WireguardInterface, member.Tags["pk"])
-						if err != nil {
-							log.WithError(err).Error("unable to remove failed/left wireguard peer")
-						}
-
-						err = ms.s.RemoveFailedNodePrune(member.Name)
-						if err != nil {
-							log.WithError(err).Error("unable to remove failed/left serf node")
-						} else {
-							log.WithField("node", member.Name).Info("removed peer from serf and wireguard")
-						}
-					}
-				}
+			case _ = <-ticker2.C:
+				ms.StatsUpdate()
 			}
 		}
 	}()
-
-	return done
 }
 
 func serfCustomWANConfig(nodeName string, bindAddr string) *serf.Config {

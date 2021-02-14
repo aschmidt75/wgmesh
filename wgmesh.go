@@ -9,12 +9,6 @@ import (
 )
 
 func main() {
-	/*		DisableColors:   true,
-		DisableQuote:    true,
-
-		FullTimestamp:   false,
-	})
-	*/
 	tf := &log.TextFormatter{}
 	tf.FullTimestamp = true
 	tf.DisableTimestamp = false

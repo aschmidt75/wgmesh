@@ -57,7 +57,7 @@ func (ms *MeshService) CreateWireguardInterfaceForMesh(bootstrapIP string, wgLis
 		return "", errors.New("unable to setup wireguard interface")
 	}
 
-	log.Infof("Created annd configured wireguard interface %s", intfName)
+	log.Infof("Created and configured wireguard interface %s", intfName)
 
 	return wgi.PublicKey, nil
 }
@@ -101,7 +101,7 @@ func (ms *MeshService) CreateWireguardInterface(wgListenPort int) (string, error
 		return "", errors.New("unable to configure wireguard interface")
 	}
 
-	log.Infof("Created annd configured wireguard interface %s as no-up", intfName)
+	log.Infof("Created and configured wireguard interface %s as no-up", intfName)
 
 	return wgi.PublicKey, nil
 }

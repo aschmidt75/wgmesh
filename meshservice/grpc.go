@@ -65,6 +65,11 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 		}, nil
 	}
 
+	log.WithFields(log.Fields{
+		"ip": mip.String(),
+		"pk": req.Pubkey,
+	}).Info("node joined mesh")
+
 	// send out a Peer Update as message to all serf nodes
 	peerAnnouncementBuf, _ := proto.Marshal(&Peer{
 		Type:         Peer_JOIN,
@@ -73,9 +78,7 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 		EndpointPort: int32(req.EndpointPort),
 		MeshIP:       targetWGIP.IP.String(),
 	})
-	log.WithField("len", len(peerAnnouncementBuf)).Trace("peerAnnouncement protobuf len")
-
-	//
+	// send out a join request event "j"
 	ms.s.UserEvent("j", []byte(peerAnnouncementBuf), true)
 
 	// return successful join response to client
@@ -111,8 +114,6 @@ func (ms *MeshService) Peers(e *Empty, stream Mesh_PeersServer) error {
 func newIPInNet(ipnet net.IPNet) (net.IP, error) {
 
 	ipmask := ipnet.Mask
-	log.WithField("ipmask", ipmask).Trace("dump")
-	log.WithField("ip", ipnet.IP).Trace("dump")
 
 	var newIP [4]byte
 	if len(ipnet.IP) == 4 {
@@ -154,7 +155,7 @@ func (ms *MeshService) StartGrpcService() error {
 	return nil
 }
 
-// StopGrpcService ...
+// GrpcService ...
 func (ms *MeshService) StopGrpcService() {
 
 	log.Debug("Stopping gRPC mesh service")

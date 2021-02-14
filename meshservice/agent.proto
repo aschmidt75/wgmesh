@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package meshservice;
+
+option go_package = "github.com/aschmidt75/wgmesh/meshservice";
+
+service Agent {
+    // Tag sets a tag on a wgmesh node
+    rpc Tag(TagRequest) returns (TagResult) {}
+
+    // Untag remove a tag on a wgmesh node
+    rpc Untag(TagRequest) returns (TagResult) {}
+}
+
+message TagResult {
+    bool ok = 1;
+}
+
+message TagRequest {
+    string key = 1;
+    string value = 2;
+}
+

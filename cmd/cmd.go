@@ -15,8 +15,11 @@ type Runner interface {
 var cmds = []Runner{
 	NewBootstrapCommand(),
 	NewJoinCommand(),
+	NewTagsCommand(),
 }
 
+// ProcessCommands takes the command line arguments and
+// starts the processing according to the above defined commands
 func ProcessCommands(args []string) error {
 	if len(args) < 1 {
 		DisplayHelp()

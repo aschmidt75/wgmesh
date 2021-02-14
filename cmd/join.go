@@ -100,9 +100,9 @@ func (g *JoinCommand) Run() error {
 	)
 
 	listenIP := getIPFromIPOrIntfParam(g.listenIP)
-	log.WithField("ip", listenIP).Trace("parsed -listen-ip")
+	log.WithField("ip", listenIP).Trace("parsed -listen-addr")
 	if listenIP == nil {
-		return errors.New("need -listen-ip")
+		return errors.New("need -listen-addr")
 	}
 
 	ms := meshservice.NewMeshService(g.meshName)
@@ -131,7 +131,7 @@ func (g *JoinCommand) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	joinResponse, err := service.Join(context.Background(), &meshservice.JoinRequest{
+	joinResponse, err := service.Join(ctx, &meshservice.JoinRequest{
 		Pubkey:       ms.WireguardPubKey,
 		EndpointIP:   listenIP.String(),
 		EndpointPort: int32(g.listenPort),
@@ -194,7 +194,7 @@ func (g *JoinCommand) Run() error {
 	wg := wgwrapper.New()
 
 	// apply peer updates
-	meshIPs := ms.ApplyPeerUpdatesFromStream(wg, stream)
+	meshPeerIPs := ms.ApplyPeerUpdatesFromStream(wg, stream)
 
 	// the interface is fully configured, up it
 	wg.SetInterfaceUp(ms.WireguardInterface)
@@ -208,7 +208,23 @@ func (g *JoinCommand) Run() error {
 		return err
 	}
 
-	// start the serf part
+	// start the serf part. make it join all received peers
+	err = g.serfSetup(&ms, listenIP, meshPeerIPs)
+	if err != nil {
+		return err
+	}
+
+	g.wait()
+
+	if err = g.cleanUp(&ms); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// serfSetup ...
+func (g *JoinCommand) serfSetup(ms *meshservice.MeshService, listenIP net.IP, meshIPs []string) (err error) {
 	ms.NewSerfCluster()
 
 	err = ms.StartSerfCluster(false, ms.WireguardPubKey, listenIP.String(), g.listenPort, ms.MeshIP.IP.String())
@@ -217,12 +233,16 @@ func (g *JoinCommand) Run() error {
 	}
 
 	ms.StartStatsUpdater()
-	memberWatcherStopCh := ms.StartMemberWatcher()
 
 	// join the cluster
 	ms.JoinSerfCluster(meshIPs)
 
-	// wait until being stopped
+	return nil
+}
+
+// waits until being stopped
+func (g *JoinCommand) wait() {
+
 	stopCh := make(chan struct{})
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc,
@@ -235,13 +255,16 @@ func (g *JoinCommand) Run() error {
 	}()
 
 	<-stopCh
+}
 
-	// take everything down
+// CleanUp ..
+func (g *JoinCommand) cleanUp(ms *meshservice.MeshService) error {
 	ms.LeaveSerfCluster()
 
-	memberWatcherStopCh <- true
+	// delete memberlist-file
+	os.Remove(g.memberListFile)
 
-	err = ms.RemoveWireguardInterfaceForMesh()
+	err := ms.RemoveWireguardInterfaceForMesh()
 	if err != nil {
 		return err
 	}

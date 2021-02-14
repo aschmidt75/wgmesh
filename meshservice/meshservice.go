@@ -53,6 +53,9 @@ type MeshService struct {
 	// gRPC
 	UnimplementedMeshServer
 	grpcServer *grpc.Server
+
+	// Agent gRPC
+	MeshAgentServer *MeshAgentServer
 }
 
 // NewMeshService creates a new MeshService for a node
