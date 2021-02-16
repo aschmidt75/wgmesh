@@ -22,6 +22,8 @@ type AgentClient interface {
 	Tag(ctx context.Context, in *TagRequest, opts ...grpc.CallOption) (*TagResult, error)
 	// Untag remove a tag on a wgmesh node
 	Untag(ctx context.Context, in *TagRequest, opts ...grpc.CallOption) (*TagResult, error)
+	// RTT yields the complete rtt timings for all nodes
+	RTT(ctx context.Context, in *AgentEmpty, opts ...grpc.CallOption) (Agent_RTTClient, error)
 }
 
 type agentClient struct {
@@ -50,6 +52,38 @@ func (c *agentClient) Untag(ctx context.Context, in *TagRequest, opts ...grpc.Ca
 	return out, nil
 }
 
+func (c *agentClient) RTT(ctx context.Context, in *AgentEmpty, opts ...grpc.CallOption) (Agent_RTTClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Agent_ServiceDesc.Streams[0], "/meshservice.Agent/RTT", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &agentRTTClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Agent_RTTClient interface {
+	Recv() (*RTTInfo, error)
+	grpc.ClientStream
+}
+
+type agentRTTClient struct {
+	grpc.ClientStream
+}
+
+func (x *agentRTTClient) Recv() (*RTTInfo, error) {
+	m := new(RTTInfo)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // AgentServer is the server API for Agent service.
 // All implementations must embed UnimplementedAgentServer
 // for forward compatibility
@@ -58,6 +92,8 @@ type AgentServer interface {
 	Tag(context.Context, *TagRequest) (*TagResult, error)
 	// Untag remove a tag on a wgmesh node
 	Untag(context.Context, *TagRequest) (*TagResult, error)
+	// RTT yields the complete rtt timings for all nodes
+	RTT(*AgentEmpty, Agent_RTTServer) error
 	mustEmbedUnimplementedAgentServer()
 }
 
@@ -70,6 +106,9 @@ func (UnimplementedAgentServer) Tag(context.Context, *TagRequest) (*TagResult, e
 }
 func (UnimplementedAgentServer) Untag(context.Context, *TagRequest) (*TagResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Untag not implemented")
+}
+func (UnimplementedAgentServer) RTT(*AgentEmpty, Agent_RTTServer) error {
+	return status.Errorf(codes.Unimplemented, "method RTT not implemented")
 }
 func (UnimplementedAgentServer) mustEmbedUnimplementedAgentServer() {}
 
@@ -120,6 +159,27 @@ func _Agent_Untag_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Agent_RTT_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(AgentEmpty)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AgentServer).RTT(m, &agentRTTServer{stream})
+}
+
+type Agent_RTTServer interface {
+	Send(*RTTInfo) error
+	grpc.ServerStream
+}
+
+type agentRTTServer struct {
+	grpc.ServerStream
+}
+
+func (x *agentRTTServer) Send(m *RTTInfo) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // Agent_ServiceDesc is the grpc.ServiceDesc for Agent service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -136,6 +196,12 @@ var Agent_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Agent_Untag_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "RTT",
+			Handler:       _Agent_RTT_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "agent.proto",
 }

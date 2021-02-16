@@ -10,7 +10,24 @@ service Agent {
 
     // Untag remove a tag on a wgmesh node
     rpc Untag(TagRequest) returns (TagResult) {}
+
+    // RTT yields the complete rtt timings for all nodes
+    rpc RTT(AgentEmpty) returns (stream RTTInfo) {}
 }
+
+message AgentEmpty {
+}
+
+message RTTNodeInfo {
+    string nodeName = 1;
+    int32 rttMsec = 2;
+}
+
+message RTTInfo {
+    string nodeName = 1;
+    repeated RTTNodeInfo rtts = 2;
+}
+
 
 message TagResult {
     bool ok = 1;

@@ -12,21 +12,33 @@ type Runner interface {
 	Name() string
 }
 
+type VersionInfo struct {
+	Version string
+	Commit  string
+	Date    string
+}
+
 var cmds = []Runner{
 	NewBootstrapCommand(),
 	NewJoinCommand(),
 	NewTagsCommand(),
+	NewRTTCommand(),
 }
 
 // ProcessCommands takes the command line arguments and
 // starts the processing according to the above defined commands
-func ProcessCommands(args []string) error {
+func ProcessCommands(args []string, vi VersionInfo) error {
 	if len(args) < 1 {
 		DisplayHelp()
 		return errors.New("You must pass a sub-command")
 	}
 
 	subcommand := os.Args[1]
+	if subcommand == "version" {
+		fmt.Printf("wgmesh %s (%s) - %s", vi.Version, vi.Commit, vi.Date)
+		fmt.Printf("(C) 2021 @aschmidt75\n")
+		os.Exit(0)
+	}
 
 	for _, cmd := range cmds {
 		if cmd.Name() == subcommand {

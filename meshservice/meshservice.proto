@@ -51,6 +51,7 @@ message LeaveResponse {
     string errorMessage = 2;
 }
 
+// mesh-internal message formats via serf user events
 
 // Peer contains connection data for an individual
 // Wireguard Peer
@@ -64,4 +65,17 @@ message Peer {
     string endpointIP = 3;          // endpoint
     int32 endpointPort = 4;         // endpoint
     string meshIP = 5;              // internal mesh ip
+}
+
+message RTTRequest {
+    string requestedBy = 1;     // node name
+}
+
+message RTTResponseInfo {
+    string node = 1;     // node name
+    int32 rttMsec = 2;
+}
+message RTTResponse {
+    string node = 1;     // node name
+    repeated RTTResponseInfo rtts = 2;
 }

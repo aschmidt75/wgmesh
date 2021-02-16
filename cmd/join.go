@@ -23,23 +23,27 @@ import (
 type JoinCommand struct {
 	CommandDefaults
 
-	fs             *flag.FlagSet
-	meshName       string
-	endpoint       string
-	listenPort     int
-	listenIP       string
-	memberListFile string
+	fs                *flag.FlagSet
+	meshName          string
+	endpoint          string
+	listenPort        int
+	listenIP          string
+	memberListFile    string
+	agentGrpcBindAddr string
+	agentGrpcBindPort int
 }
 
 // NewJoinCommand creates the Join Command
 func NewJoinCommand() *JoinCommand {
 	c := &JoinCommand{
-		CommandDefaults: NewCommandDefaults(),
-		fs:              flag.NewFlagSet("join", flag.ContinueOnError),
-		meshName:        "",
-		endpoint:        "",
-		listenPort:      54540,
-		memberListFile:  "",
+		CommandDefaults:   NewCommandDefaults(),
+		fs:                flag.NewFlagSet("join", flag.ContinueOnError),
+		meshName:          "",
+		endpoint:          "",
+		listenPort:        54540,
+		memberListFile:    "",
+		agentGrpcBindAddr: "127.0.0.1",
+		agentGrpcBindPort: 5001,
 	}
 
 	c.fs.StringVar(&c.meshName, "name", c.meshName, "name of the mesh network")
@@ -48,6 +52,8 @@ func NewJoinCommand() *JoinCommand {
 	c.fs.IntVar(&c.listenPort, "listen-port", c.listenPort, "set the (external) wireguard listen port")
 	c.fs.StringVar(&c.listenIP, "listen-addr", c.listenIP, "set the (external) wireguard listen IP. May be an IP adress, or an interface name (e.g. eth0) or a numbered address on an interface (e.g. eth0%1)")
 	c.fs.StringVar(&c.memberListFile, "memberlist-file", c.memberListFile, "optional name of file for a log of all current mesh members")
+	c.fs.StringVar(&c.agentGrpcBindAddr, "agent-grpc-bind-addr", c.agentGrpcBindAddr, "(private) address to bind local agent service to")
+	c.fs.IntVar(&c.agentGrpcBindPort, "agent-grpc-bind-port", c.agentGrpcBindPort, "port to bind local agent service to")
 	c.DefaultFields(c.fs)
 
 	return c
@@ -87,6 +93,14 @@ func (g *JoinCommand) Init(args []string) error {
 
 	if g.listenPort < 0 || g.listenPort > 65535 {
 		return fmt.Errorf("%d is not valid for -listen-port", g.listenPort)
+	}
+
+	if net.ParseIP(g.agentGrpcBindAddr) == nil {
+		return fmt.Errorf("%s is not a valid ip for -agent-grpc-bind-addr", g.agentGrpcBindAddr)
+	}
+
+	if g.agentGrpcBindPort < 0 || g.agentGrpcBindPort > 65535 {
+		return fmt.Errorf("%d is not valid for -agent-grpc-bind-port", g.agentGrpcBindPort)
 	}
 
 	return nil
@@ -214,11 +228,33 @@ func (g *JoinCommand) Run() error {
 		return err
 	}
 
+	err = g.grpcSetup(&ms)
+	if err != nil {
+		return err
+	}
+
 	g.wait()
 
 	if err = g.cleanUp(&ms); err != nil {
 		return err
 	}
+
+	return nil
+}
+
+// grpcSetup starts the local agent
+func (g *JoinCommand) grpcSetup(ms *meshservice.MeshService) (err error) {
+
+	// start the local agent
+	ms.MeshAgentServer = meshservice.NewMeshAgentServer(ms, g.agentGrpcBindAddr, g.agentGrpcBindPort)
+	log.WithField("mas", ms.MeshAgentServer).Trace("agent")
+	go func() {
+		log.Infof("Starting gRPC Agent Service at %s:%d", g.agentGrpcBindAddr, g.agentGrpcBindPort)
+		err = ms.MeshAgentServer.StartAgentGrpcService()
+		if err != nil {
+			log.Error(err)
+		}
+	}()
 
 	return nil
 }

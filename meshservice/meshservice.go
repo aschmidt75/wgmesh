@@ -56,6 +56,9 @@ type MeshService struct {
 
 	// Agent gRPC
 	MeshAgentServer *MeshAgentServer
+
+	//
+	rttResponseChan *chan RTTResponse
 }
 
 // NewMeshService creates a new MeshService for a node
@@ -81,4 +84,12 @@ func (ms *MeshService) SetNodeName() {
 		i += int(ms.MeshIP.IP[3])
 		ms.NodeName = fmt.Sprintf("%s%X", ms.MeshName, i)
 	}
+}
+
+func (ms *MeshService) setRttResponseCh(ch *chan RTTResponse) {
+	ms.rttResponseChan = ch
+}
+
+func (ms *MeshService) releaseRttResponseCh() {
+	ms.rttResponseChan = nil
 }

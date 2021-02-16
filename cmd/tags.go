@@ -65,7 +65,7 @@ func (g *TagsCommand) Init(args []string) error {
 
 	if g.tagStr != "" {
 		arr := strings.Split(g.tagStr, "=")
-		if len(arr) != 2 {
+		if len(arr) < 2 {
 			return errors.New("Set a tag using -tag key=value")
 		}
 	}
@@ -122,7 +122,7 @@ func (g *TagsCommand) Run() error {
 
 	} else {
 
-		arr := strings.Split(g.tagStr, "=")
+		arr := strings.SplitN(g.tagStr, "=", 2)
 
 		r, err := agent.Tag(ctx, &meshservice.TagRequest{
 			Key:   arr[0],

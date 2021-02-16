@@ -2,10 +2,18 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
+	"time"
 
 	"github.com/aschmidt75/wgmesh/cmd"
 	log "github.com/sirupsen/logrus"
+)
+
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func main() {
@@ -17,7 +25,12 @@ func main() {
 	tf.DisableSorting = true
 	log.SetFormatter(tf)
 
-	if err := cmd.ProcessCommands(os.Args[1:]); err != nil {
+	rand.Seed(time.Now().UnixNano())
+	if err := cmd.ProcessCommands(os.Args[1:], cmd.VersionInfo{
+		Version: version,
+		Commit:  commit,
+		Date:    date,
+	}); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}

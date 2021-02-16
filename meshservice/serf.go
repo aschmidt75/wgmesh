@@ -1,116 +1,18 @@
 package meshservice
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	ioutil "io/ioutil"
-	"net"
 
 	"os"
 	reflect "reflect"
 	"time"
 
-	wgwrapper "github.com/aschmidt75/go-wg-wrapper/pkg/wgwrapper"
 	memberlist "github.com/hashicorp/memberlist"
 	serf "github.com/hashicorp/serf/serf"
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/protobuf/proto"
 )
-
-// parses the user event as a Peer announcement and adds the peer
-// to the wireguard interface
-func (ms *MeshService) serfHandleJoinRequestEvent(userEv serf.UserEvent) {
-	peerAnnouncement := &Peer{}
-	err := proto.Unmarshal(userEv.Payload, peerAnnouncement)
-	if err != nil {
-		log.WithError(err).Error("unable to unmarshal a user event")
-	}
-	log.WithField("pa", peerAnnouncement).Trace("user event: peerAnnouncement")
-
-	if peerAnnouncement.Type == Peer_JOIN {
-		wg := wgwrapper.New()
-		ok, err := wg.AddPeer(ms.WireguardInterface, wgwrapper.WireguardPeer{
-			RemoteEndpointIP: peerAnnouncement.EndpointIP,
-			ListenPort:       int(peerAnnouncement.EndpointPort),
-			Pubkey:           peerAnnouncement.Pubkey,
-			AllowedIPs: []net.IPNet{
-				net.IPNet{
-					IP:   net.ParseIP(peerAnnouncement.MeshIP),
-					Mask: net.CIDRMask(32, 32),
-				},
-			},
-		})
-
-		log.WithField("ok", ok).Trace("1")
-		log.WithField("err", err).Trace("1")
-
-		if err != nil {
-			log.WithError(err).Error("unable to add peer after user event")
-		} else {
-			if ok {
-				log.WithFields(log.Fields{
-					"pk": peerAnnouncement.Pubkey,
-					"ip": peerAnnouncement.MeshIP,
-				}).Info("added peer")
-			} else {
-				// if we're a bootstrap node then this peer has already been added
-				// by the grpc join request function.
-			}
-		}
-	}
-}
-
-func (ms *MeshService) serfEventHandler(ch <-chan serf.Event) {
-	for {
-		select {
-		case ev := <-ch:
-			if ev.EventType() == serf.EventUser {
-				userEv := ev.(serf.UserEvent)
-
-				if userEv.Name == "j" {
-					log.WithField("ev", ev).Debug("received join request event")
-					ms.serfHandleJoinRequestEvent(userEv)
-				}
-
-			}
-
-			if ev.EventType() == serf.EventMemberJoin {
-				evJoin := ev.(serf.MemberEvent)
-
-				log.WithField("members", evJoin.Members).Debug("received join event")
-			}
-			if ev.EventType() == serf.EventMemberLeave || ev.EventType() == serf.EventMemberFailed || ev.EventType() == serf.EventMemberReap {
-				evJoin := ev.(serf.MemberEvent)
-
-				log.WithField("members", evJoin.Members).Debug("received leave/failed event")
-
-				for _, member := range evJoin.Members {
-					// remove this peer from wireguard interface
-					wg := wgwrapper.New()
-
-					err := wg.RemovePeerByPubkey(ms.WireguardInterface, member.Tags["pk"])
-					if err != nil {
-						log.WithError(err).Error("unable to remove failed/left wireguard peer")
-					}
-
-					err = ms.s.RemoveFailedNodePrune(member.Name)
-					if err != nil {
-						log.WithError(err).Error("unable to remove failed/left serf node")
-					} else {
-						log.WithFields(log.Fields{
-							"node": member.Name,
-							"ip":   member.Addr.String(),
-						}).Info("node left mesh")
-					}
-
-				}
-
-			}
-
-		}
-	}
-}
 
 // NewSerfCluster sets up a cluster with a given nodeName,
 // a bind address. it also registers a user event listener
@@ -200,60 +102,6 @@ func (ms *MeshService) getStats() *statsContent {
 	return &statsContent{
 		numNodes: ms.s.NumNodes(),
 	}
-}
-
-// SetMemberlistExportFile sets the file name for an export
-// of the current memberlist. If empty no file is written
-func (ms *MeshService) SetMemberlistExportFile(f string) {
-	ms.memberExportFile = f
-}
-
-type exportedMember struct {
-	Addr   string            `json:"addr"`
-	Status string            `json:"st"`
-	RTT    int64             `json:"rtt"`
-	Tags   map[string]string `json:"tags"`
-}
-type exportedMemberList struct {
-	Members    map[string]exportedMember `json:"members"`
-	LastUpdate time.Time                 `json:"lastUpdate"`
-}
-
-func (ms *MeshService) updateMemberExport() {
-	e := &exportedMemberList{
-		Members:    make(map[string]exportedMember),
-		LastUpdate: time.Now(),
-	}
-	myCoord, err := ms.s.GetCoordinate()
-	if err != nil {
-		log.WithError(err).Warn("Unable to get my own coordinate, check config")
-		myCoord = nil
-	}
-	for _, member := range ms.s.Members() {
-		em := exportedMember{
-			Addr:   member.Addr.String(),
-			Status: member.Status.String(),
-			Tags:   member.Tags,
-		}
-		// compute RTT if we have all distances
-		memberCoord, ok := ms.s.GetCachedCoordinate(member.Name)
-		if ok && memberCoord != nil {
-			d := memberCoord.DistanceTo(myCoord)
-			em.RTT = int64(d / time.Millisecond)
-
-			// TODO: for LAN mode add Microseconds as well
-		}
-
-		//
-		e.Members[member.Name] = em
-	}
-
-	content, err := json.MarshalIndent(e, "", " ")
-	if err != nil {
-		log.WithError(err).Error("unable to write to file")
-	}
-
-	err = ioutil.WriteFile(ms.memberExportFile, content, 0640)
 }
 
 // StartStatsUpdater starts the statistics update ticker

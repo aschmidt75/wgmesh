@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	grpc "google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
 // MeshAgentServer
@@ -73,6 +75,57 @@ func (as *MeshAgentServer) Untag(ctx context.Context, tr *TagRequest) (*TagResul
 	return &TagResult{
 		Ok: true,
 	}, nil
+}
+
+// RTT ...
+func (as *MeshAgentServer) RTT(cte *AgentEmpty, rttServer Agent_RTTServer) error {
+	log.Trace("RTT requested")
+
+	ch := make(chan RTTResponse)
+	doneCh := make(chan struct{})
+
+	go func() {
+		for {
+			select {
+			case rtt := <-ch:
+				log.WithField("rtt", rtt).Trace("RTT")
+
+				rtts := make([]*RTTNodeInfo, len(rtt.Rtts))
+				for idx, rttResponseInfo := range rtt.Rtts {
+					rtts[idx] = &RTTNodeInfo{
+						NodeName: rttResponseInfo.Node,
+						RttMsec:  rttResponseInfo.RttMsec,
+					}
+				}
+				rttInfo := &RTTInfo{
+					NodeName: rtt.Node,
+					Rtts:     rtts,
+				}
+				if err := rttServer.Send(rttInfo); err != nil {
+					log.WithError(err).Error("unable to stream send rtt info")
+				}
+
+			case <-doneCh:
+				return
+			}
+		}
+	}()
+	as.ms.setRttResponseCh(&ch)
+
+	// send a user event which makes all nodes report their rtts
+	rttRequestBuf, _ := proto.Marshal(&RTTRequest{
+		RequestedBy: as.ms.NodeName,
+	})
+	as.ms.s.UserEvent("rtt0", []byte(rttRequestBuf), true)
+
+	// wait until all are collected and streamed out
+	time.Sleep(time.Duration(as.ms.s.NumNodes()+1) * time.Second)
+
+	// done
+	doneCh <- struct{}{}
+
+	return nil
+
 }
 
 // StartAgentGrpcService ..
