@@ -149,6 +149,7 @@ func (g *JoinCommand) Run() error {
 		Pubkey:       ms.WireguardPubKey,
 		EndpointIP:   listenIP.String(),
 		EndpointPort: int32(g.listenPort),
+		MeshName:     g.meshName,
 	})
 	if err != nil {
 		log.Error(err)

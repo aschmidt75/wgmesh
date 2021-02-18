@@ -3,6 +3,7 @@ package meshservice
 import (
 	"fmt"
 	"net"
+	"time"
 
 	wgwrapper "github.com/aschmidt75/go-wg-wrapper/pkg/wgwrapper"
 	serf "github.com/hashicorp/serf/serf"
@@ -49,6 +50,10 @@ type MeshService struct {
 
 	// if set, exports the serf member list to this file
 	memberExportFile string
+
+	// timestamp of latest update to the member state
+	lastUpdatedTS  time.Time
+	lastExportedTS time.Time
 
 	// gRPC
 	UnimplementedMeshServer

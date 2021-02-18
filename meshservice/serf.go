@@ -82,7 +82,7 @@ func (ms *MeshService) JoinSerfCluster(clusterNodes []string) {
 func (ms *MeshService) LeaveSerfCluster() {
 	ms.s.Leave()
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(3 * time.Second)
 	log.Info("Left the serf cluster")
 
 	ms.s.Shutdown()

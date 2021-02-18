@@ -19,6 +19,14 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 
 	log.WithField("req", req).Trace("Got join request")
 
+	if req.MeshName != ms.MeshName {
+		return &JoinResponse{
+			Result:       JoinResponse_ERROR,
+			ErrorMessage: "Unknown mesh",
+			JoinerMeshIP: "",
+		}, nil
+	}
+
 	// choose a random ip adress from the adress pool of this node
 	// which has not been used before
 	var mip net.IP
@@ -155,7 +163,7 @@ func (ms *MeshService) StartGrpcService() error {
 	return nil
 }
 
-// GrpcService ...
+// StopGrpcService stops the grpc server
 func (ms *MeshService) StopGrpcService() {
 
 	log.Debug("Stopping gRPC mesh service")

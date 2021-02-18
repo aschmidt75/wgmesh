@@ -1,0 +1,30 @@
+$ORIGIN samplemesh.local.
+$TTL 60
+@                  1800  IN  SOA ns1 none (
+                                    {{ serial }} ; serial from wgmesh
+                                    7200       ; refresh (2 hours)
+                                    3600       ; retry (1 hour)
+                                    1209600    ; expire (2 weeks)
+                                    3600       ; minimum (1 hour)
+                                        )
+@                  1800  IN  NS ns1
+
+; A Records
+; All nodes appear here with their wireguard mesh ip as an a record
+; Additionally there are records summarizing mesh resources, e.g. all nodes
+{{#a_records}}
+{{ this.name }}     IN  A   {{ this.ip }}
+{{/a_records}}
+
+; CNAME Records
+; All services appear here with a CNAME record pointing to the mesh
+; nodes which currently include the service
+{{#cname_records}}
+{{ this.cname }}     IN  CNAME   {{ this.names }}
+{{/cname_records}}
+
+; TXT Record
+; All services appear here with their tag information
+{{#txt_records}}
+{{ this.name }}     IN  TXT   {{ this.text }}
+{{/txt_records}}

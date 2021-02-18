@@ -131,11 +131,19 @@ func (ms *MeshService) serfEventHandler(ch <-chan serf.Event) {
 				evJoin := ev.(serf.MemberEvent)
 
 				log.WithField("members", evJoin.Members).Debug("received join event")
+				ms.lastUpdatedTS = time.Now()
+			}
+			if ev.EventType() == serf.EventMemberUpdate {
+				evUpdate := ev.(serf.MemberEvent)
+
+				log.WithField("members", evUpdate.Members).Debug("received member update")
+				ms.lastUpdatedTS = time.Now()
 			}
 			if ev.EventType() == serf.EventMemberLeave || ev.EventType() == serf.EventMemberFailed || ev.EventType() == serf.EventMemberReap {
 				evJoin := ev.(serf.MemberEvent)
 
 				log.WithField("members", evJoin.Members).Debug("received leave/failed event")
+				ms.lastUpdatedTS = time.Now()
 
 				for _, member := range evJoin.Members {
 					// remove this peer from wireguard interface

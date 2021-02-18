@@ -18,9 +18,17 @@ message Empty {
 }
 
 message JoinRequest {
+    // wireguard: public key of joiner node
     string pubkey = 1;
+
+    // wireguard: endpoint IP of joiner node
     string endpointIP = 2;
+
+    // wireguard: endpoint UDP port of joiner node
     int32 endpointPort = 3;
+
+    // name of mesh to join
+    string meshName = 4;
 }
 
 message JoinResponse {

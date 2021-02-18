@@ -17,3 +17,5 @@ wgmesh
 .vscode/
 
 dist/
+
+node_modules/

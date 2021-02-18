@@ -34,14 +34,20 @@ type exportedService struct {
 type exportedMemberList struct {
 	Members    map[string]exportedMember  `json:"members"`
 	Services   map[string]exportedService `json:"services"`
-	LastUpdate time.Time                  `json:"lastUpdate"`
+	LastUpdate int64                      `json:"lastUpdate"`
 }
 
 func (ms *MeshService) updateMemberExport() {
+
+	if ms.lastUpdatedTS.Unix() <= ms.lastExportedTS.Unix() {
+		return
+	}
+	log.Debug("updateMemberExport")
+
 	e := &exportedMemberList{
 		Members:    make(map[string]exportedMember),
 		Services:   make(map[string]exportedService),
-		LastUpdate: time.Now(),
+		LastUpdate: ms.lastUpdatedTS.Unix(),
 	}
 	myCoord, err := ms.s.GetCoordinate()
 	if err != nil {
@@ -126,4 +132,6 @@ func (ms *MeshService) updateMemberExport() {
 	}
 
 	err = ioutil.WriteFile(ms.memberExportFile, content, 0640)
+
+	ms.lastExportedTS = ms.lastUpdatedTS
 }
