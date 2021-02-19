@@ -59,6 +59,7 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 
 	ok, err := wg.AddPeer(ms.WireguardInterface, p)
 	if err != nil {
+		log.Error(err)
 		return &JoinResponse{
 			Result:       JoinResponse_ERROR,
 			ErrorMessage: "Unable to add peer",
@@ -95,6 +96,7 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 		ErrorMessage: "",
 		JoinerMeshIP: mip.String(),
 		MeshCidr:     ms.CIDRRange.String(),
+		CreationTS:   int64(ms.creationTS.Unix()),
 	}, nil
 }
 

@@ -19,6 +19,7 @@ require (
 	github.com/mdlayher/netlink v1.2.1 // indirect
 	github.com/miekg/dns v1.1.38 // indirect
 	github.com/sirupsen/logrus v1.7.0
+	go.opencensus.io v0.22.6
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/net v0.0.0-20210119194325-5f4716e94777 // indirect
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
@@ -28,4 +29,5 @@ require (
 	google.golang.org/grpc v1.35.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0 // indirect
 	google.golang.org/protobuf v1.25.0
+	gortc.io/stun v1.23.0
 )

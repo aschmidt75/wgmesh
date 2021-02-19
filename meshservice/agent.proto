@@ -5,6 +5,17 @@ package meshservice;
 option go_package = "github.com/aschmidt75/wgmesh/meshservice";
 
 service Agent {
+
+    // Info returns a summary about the running mesh
+    rpc Info(AgentEmpty) returns (MeshInfo) {}
+
+    // Nodes streams the current list of nodes known to the mesh
+    rpc Nodes(AgentEmpty) returns (stream MemberInfo) {}
+
+    // This methods blocks until a change in the mesh setup
+    // has occured
+    rpc WaitForChangeInMesh(WaitInfo) returns (stream WaitResponse) {}
+
     // Tag sets a tag on a wgmesh node
     rpc Tag(TagRequest) returns (TagResult) {}
 
@@ -16,6 +27,27 @@ service Agent {
 }
 
 message AgentEmpty {
+}
+
+message MeshInfo {
+    string name = 1;
+    int32 nodeCount = 2;
+    string nodeName = 3;
+    int64 meshCeationTS = 4;
+    int64 nodeJoinTS = 5;
+}
+
+message MemberInfoTag {
+    string key = 1;
+    string value = 2;
+}
+
+message MemberInfo {
+    string nodeName = 1;
+    string addr = 2;
+    string status = 3;
+    int32 rttMsec = 4;
+    repeated MemberInfoTag tags = 5;
 }
 
 message RTTNodeInfo {
@@ -38,3 +70,15 @@ message TagRequest {
     string value = 2;
 }
 
+message WaitInfo {
+    int32 timeoutSecs = 1;
+}
+
+message WaitResponse {
+    // true if we ran into a timeout
+    bool wasTimeout = 1;
+
+    // true if changes occured within the
+    // mesh setup (nodes joined, left, tags changed, other..)
+    bool changesOccured = 2;
+}

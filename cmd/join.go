@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -17,43 +18,47 @@ import (
 	meshservice "github.com/aschmidt75/wgmesh/meshservice"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"gortc.io/stun"
 )
 
 // JoinCommand struct
 type JoinCommand struct {
 	CommandDefaults
 
-	fs                *flag.FlagSet
-	meshName          string
-	endpoint          string
-	listenPort        int
-	listenIP          string
-	memberListFile    string
-	agentGrpcBindAddr string
-	agentGrpcBindPort int
+	fs                     *flag.FlagSet
+	meshName               string
+	nodeName               string
+	endpoint               string
+	listenPort             int
+	listenIP               string
+	memberListFile         string
+	agentGrpcBindSocket    string
+	agentGrpcBindSocketIDs string
 }
 
 // NewJoinCommand creates the Join Command
 func NewJoinCommand() *JoinCommand {
 	c := &JoinCommand{
-		CommandDefaults:   NewCommandDefaults(),
-		fs:                flag.NewFlagSet("join", flag.ContinueOnError),
-		meshName:          "",
-		endpoint:          "",
-		listenPort:        54540,
-		memberListFile:    "",
-		agentGrpcBindAddr: "127.0.0.1",
-		agentGrpcBindPort: 5001,
+		CommandDefaults:        NewCommandDefaults(),
+		fs:                     flag.NewFlagSet("join", flag.ContinueOnError),
+		meshName:               "",
+		nodeName:               "",
+		endpoint:               "",
+		listenPort:             54540,
+		agentGrpcBindSocket:    "/var/run/wgmesh.sock",
+		agentGrpcBindSocketIDs: "",
+		memberListFile:         "",
 	}
 
 	c.fs.StringVar(&c.meshName, "name", c.meshName, "name of the mesh network")
 	c.fs.StringVar(&c.meshName, "n", c.meshName, "name of the mesh network (short)")
+	c.fs.StringVar(&c.nodeName, "node-name", c.nodeName, "(optional) name of this node")
 	c.fs.StringVar(&c.endpoint, "bootstrap-addr", c.endpoint, "IP:Port of remote mesh bootstrap node")
 	c.fs.IntVar(&c.listenPort, "listen-port", c.listenPort, "set the (external) wireguard listen port")
 	c.fs.StringVar(&c.listenIP, "listen-addr", c.listenIP, "set the (external) wireguard listen IP. May be an IP adress, or an interface name (e.g. eth0) or a numbered address on an interface (e.g. eth0%1)")
+	c.fs.StringVar(&c.agentGrpcBindSocket, "agent-grpc-bind-socket", c.agentGrpcBindSocket, "local socket file to bind grpc agent to")
+	c.fs.StringVar(&c.agentGrpcBindSocketIDs, "agent-grpc-bind-socket-id", c.agentGrpcBindSocketIDs, "<uid:gid> to change bind socket to")
 	c.fs.StringVar(&c.memberListFile, "memberlist-file", c.memberListFile, "optional name of file for a log of all current mesh members")
-	c.fs.StringVar(&c.agentGrpcBindAddr, "agent-grpc-bind-addr", c.agentGrpcBindAddr, "(private) address to bind local agent service to")
-	c.fs.IntVar(&c.agentGrpcBindPort, "agent-grpc-bind-port", c.agentGrpcBindPort, "port to bind local agent service to")
 	c.DefaultFields(c.fs)
 
 	return c
@@ -95,12 +100,12 @@ func (g *JoinCommand) Init(args []string) error {
 		return fmt.Errorf("%d is not valid for -listen-port", g.listenPort)
 	}
 
-	if net.ParseIP(g.agentGrpcBindAddr) == nil {
-		return fmt.Errorf("%s is not a valid ip for -agent-grpc-bind-addr", g.agentGrpcBindAddr)
-	}
+	if g.agentGrpcBindSocketIDs != "" {
+		re := regexp.MustCompile(`^[0-9]+:[0-9]+$`)
 
-	if g.agentGrpcBindPort < 0 || g.agentGrpcBindPort > 65535 {
-		return fmt.Errorf("%d is not valid for -agent-grpc-bind-port", g.agentGrpcBindPort)
+		if !re.Match([]byte(g.agentGrpcBindSocketIDs)) {
+			return fmt.Errorf("%s is not valid for -grpc-bind-socket-id", g.agentGrpcBindSocketIDs)
+		}
 	}
 
 	return nil
@@ -113,10 +118,42 @@ func (g *JoinCommand) Run() error {
 		"Running cli command",
 	)
 
-	listenIP := getIPFromIPOrIntfParam(g.listenIP)
-	log.WithField("ip", listenIP).Trace("parsed -listen-addr")
-	if listenIP == nil {
-		return errors.New("need -listen-addr")
+	var listenIP net.IP
+	if g.listenIP == "" {
+		log.Info("Fetching external IP from STUN server")
+		// Creating a "connection" to STUN server.
+		c, err := stun.Dial("udp4", "stun.l.google.com:19302")
+		if err != nil {
+			return err
+		}
+		// Building binding request with random transaction id.
+		message, err := stun.Build(stun.TransactionID, stun.BindingRequest)
+		if err != nil {
+			return err
+		}
+		// Sending request to STUN server, waiting for response message.
+		if err := c.Do(message, func(res stun.Event) {
+			if res.Error != nil {
+				return
+			}
+			// Decoding XOR-MAPPED-ADDRESS attribute from message.
+			var xorAddr stun.XORMappedAddress
+			if err := xorAddr.GetFrom(res.Message); err != nil {
+				return
+			}
+			listenIP = xorAddr.IP
+			log.WithField("ip", listenIP).Info("Using external IP when connecting with mesh")
+		}); err != nil {
+			return err
+		}
+	} else {
+
+		listenIP = getIPFromIPOrIntfParam(g.listenIP)
+		log.WithField("ip", listenIP).Trace("parsed -listen-addr")
+		if listenIP == nil {
+			return errors.New("need -listen-addr")
+		}
+
 	}
 
 	ms := meshservice.NewMeshService(g.meshName)
@@ -142,7 +179,7 @@ func (g *JoinCommand) Run() error {
 	service := meshservice.NewMeshClient(conn)
 	log.WithField("service", service).Trace("got grpc service")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	joinResponse, err := service.Join(ctx, &meshservice.JoinRequest{
@@ -153,6 +190,12 @@ func (g *JoinCommand) Run() error {
 	})
 	if err != nil {
 		log.Error(err)
+
+		// remove wireguard interface
+		err = ms.RemoveWireguardInterfaceForMesh()
+		if err != nil {
+			log.Error(err)
+		}
 		return fmt.Errorf("cannot communicate with endpoint at %s", g.endpoint)
 	}
 	log.WithField("jr", joinResponse).Trace("got joinResponse")
@@ -167,6 +210,8 @@ func (g *JoinCommand) Run() error {
 		}
 		return nil
 	}
+
+	ms.SetTimestamps(joinResponse.CreationTS, time.Now().Unix())
 
 	// MeshIP ist composed of what user specifies using -ip, but
 	// with the net mask of -cidr. e.g. 10.232.0.0/16 with an
@@ -194,7 +239,7 @@ func (g *JoinCommand) Run() error {
 		return err
 	}
 
-	ms.SetNodeName()
+	ms.SetNodeName(g.nodeName)
 
 	// query the list of all peers.
 	stream, err := service.Peers(ctx, &meshservice.Empty{})
@@ -208,7 +253,8 @@ func (g *JoinCommand) Run() error {
 
 	wg := wgwrapper.New()
 
-	// apply peer updates
+	// apply peer updates. So we will have wireguard peerings
+	// to all nodes before we join the serf cluster.
 	meshPeerIPs := ms.ApplyPeerUpdatesFromStream(wg, stream)
 
 	// the interface is fully configured, up it
@@ -245,18 +291,16 @@ func (g *JoinCommand) Run() error {
 
 // grpcSetup starts the local agent
 func (g *JoinCommand) grpcSetup(ms *meshservice.MeshService) (err error) {
-
 	// start the local agent
-	ms.MeshAgentServer = meshservice.NewMeshAgentServer(ms, g.agentGrpcBindAddr, g.agentGrpcBindPort)
+	ms.MeshAgentServer = meshservice.NewMeshAgentServerSocket(ms, g.agentGrpcBindSocket, g.agentGrpcBindSocketIDs)
 	log.WithField("mas", ms.MeshAgentServer).Trace("agent")
 	go func() {
-		log.Infof("Starting gRPC Agent Service at %s:%d", g.agentGrpcBindAddr, g.agentGrpcBindPort)
+		log.Infof("Starting gRPC Agent Service at %s", g.agentGrpcBindSocket)
 		err = ms.MeshAgentServer.StartAgentGrpcService()
 		if err != nil {
 			log.Error(err)
 		}
 	}()
-
 	return nil
 }
 
@@ -296,6 +340,9 @@ func (g *JoinCommand) wait() {
 
 // CleanUp ..
 func (g *JoinCommand) cleanUp(ms *meshservice.MeshService) error {
+	// take everything down
+	ms.MeshAgentServer.StopAgentGrpcService()
+
 	ms.LeaveSerfCluster()
 
 	// delete memberlist-file

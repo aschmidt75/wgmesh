@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"text/tabwriter"
 	"time"
@@ -18,9 +17,8 @@ import (
 type RTTCommand struct {
 	CommandDefaults
 
-	fs            *flag.FlagSet
-	agentGrpcAddr string
-	agentGrpcPort int
+	fs              *flag.FlagSet
+	agentGrpcSocket string
 }
 
 // NewRTTCommand creates the Tag Command
@@ -28,12 +26,10 @@ func NewRTTCommand() *RTTCommand {
 	c := &RTTCommand{
 		CommandDefaults: NewCommandDefaults(),
 		fs:              flag.NewFlagSet("rtt", flag.ContinueOnError),
-		agentGrpcAddr:   "127.0.0.1",
-		agentGrpcPort:   5001,
+		agentGrpcSocket: "/var/run/wgmesh.sock",
 	}
 
-	c.fs.StringVar(&c.agentGrpcAddr, "agent-grpc-addr", c.agentGrpcAddr, "address of agent to dial")
-	c.fs.IntVar(&c.agentGrpcPort, "agent-grpc-port", c.agentGrpcPort, "port of agent to dial")
+	c.fs.StringVar(&c.agentGrpcSocket, "agent-grpc-socket", c.agentGrpcSocket, "agent socket to dial")
 
 	c.DefaultFields(c.fs)
 
@@ -53,14 +49,6 @@ func (g *RTTCommand) Init(args []string) error {
 	}
 	g.ProcessDefaults()
 
-	if net.ParseIP(g.agentGrpcAddr) == nil {
-		return fmt.Errorf("%s is not a valid ip for -agent-grpc-addr", g.agentGrpcAddr)
-	}
-
-	if g.agentGrpcPort < 0 || g.agentGrpcPort > 65535 {
-		return fmt.Errorf("%d is not valid for -agent-grpc-port", g.agentGrpcPort)
-	}
-
 	return nil
 }
 
@@ -71,7 +59,7 @@ func (g *RTTCommand) Run() error {
 	)
 
 	//
-	endpoint := fmt.Sprintf("%s:%d", g.agentGrpcAddr, g.agentGrpcPort)
+	endpoint := fmt.Sprintf("unix://%s", g.agentGrpcSocket)
 
 	conn, err := grpc.Dial(endpoint, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {

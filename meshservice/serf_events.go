@@ -94,6 +94,16 @@ func (ms *MeshService) serfEventHandler(ch <-chan serf.Event) {
 	for {
 		select {
 		case ev := <-ch:
+
+			go func(ev serf.Event) {
+				for key, ch := range ms.serfEventNotifierMap {
+					log.WithFields(log.Fields{
+						"key": key,
+						"ev":  ev}).Trace("Forwarding event")
+					*ch <- ev
+				}
+			}(ev)
+
 			if ev.EventType() == serf.EventUser {
 				userEv := ev.(serf.UserEvent)
 
@@ -113,16 +123,14 @@ func (ms *MeshService) serfEventHandler(ch <-chan serf.Event) {
 					if err != nil {
 						log.WithError(err).Error("unable to unmarshal rtt response user event")
 					}
-					if rttResponse.Node == ms.NodeName {
-						// skip, this is me
-					} else {
-						log.WithField("rttinfo", rttResponse).Trace("user event: rttResponse")
 
-						// forward to current rtt response chan
-						if ms.rttResponseChan != nil {
-							*ms.rttResponseChan <- *rttResponse
-						}
+					log.WithField("rttinfo", rttResponse).Trace("user event: rttResponse")
+
+					// forward to current rtt response chan
+					if ms.rttResponseChan != nil {
+						*ms.rttResponseChan <- *rttResponse
 					}
+
 				}
 
 			}

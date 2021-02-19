@@ -5,7 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net"
 	"strings"
 	"time"
 
@@ -18,11 +17,10 @@ import (
 type TagsCommand struct {
 	CommandDefaults
 
-	fs            *flag.FlagSet
-	tagStr        string
-	deleteFlag    string
-	agentGrpcAddr string
-	agentGrpcPort int
+	fs              *flag.FlagSet
+	tagStr          string
+	deleteFlag      string
+	agentGrpcSocket string
 }
 
 // NewTagsCommand creates the Tag Command
@@ -32,14 +30,12 @@ func NewTagsCommand() *TagsCommand {
 		fs:              flag.NewFlagSet("tags", flag.ContinueOnError),
 		tagStr:          "",
 		deleteFlag:      "",
-		agentGrpcAddr:   "127.0.0.1",
-		agentGrpcPort:   5001,
+		agentGrpcSocket: "/var/run/wgmesh.sock",
 	}
 
 	c.fs.StringVar(&c.tagStr, "set", c.tagStr, "set tag key=value")
 	c.fs.StringVar(&c.deleteFlag, "delete", c.deleteFlag, "to delete a key")
-	c.fs.StringVar(&c.agentGrpcAddr, "agent-grpc-addr", c.agentGrpcAddr, "address of agent to dial")
-	c.fs.IntVar(&c.agentGrpcPort, "agent-grpc-port", c.agentGrpcPort, "port of agent to dial")
+	c.fs.StringVar(&c.agentGrpcSocket, "agent-grpc-socket", c.agentGrpcSocket, "agent socket to dial")
 
 	c.DefaultFields(c.fs)
 
@@ -70,14 +66,6 @@ func (g *TagsCommand) Init(args []string) error {
 		}
 	}
 
-	if net.ParseIP(g.agentGrpcAddr) == nil {
-		return fmt.Errorf("%s is not a valid ip for -agent-grpc-addr", g.agentGrpcAddr)
-	}
-
-	if g.agentGrpcPort < 0 || g.agentGrpcPort > 65535 {
-		return fmt.Errorf("%d is not valid for -agent-grpc-port", g.agentGrpcPort)
-	}
-
 	return nil
 }
 
@@ -89,7 +77,7 @@ func (g *TagsCommand) Run() error {
 	)
 
 	//
-	endpoint := fmt.Sprintf("%s:%d", g.agentGrpcAddr, g.agentGrpcPort)
+	endpoint := fmt.Sprintf("unix://%s", g.agentGrpcSocket)
 
 	conn, err := grpc.Dial(endpoint, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {

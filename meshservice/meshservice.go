@@ -62,19 +62,51 @@ type MeshService struct {
 	// Agent gRPC
 	MeshAgentServer *MeshAgentServer
 
+	// when the first bootstrap node started this mesh
+	creationTS time.Time
+
+	// when this node joined the mesh
+	joinTS time.Time
+
 	//
 	rttResponseChan *chan RTTResponse
+
+	//
+	serfEventNotifierMap map[string]SerfEventChan
+}
+
+// SerfEventChan is a pointer to a channel of serf events,
+// so that events can be forwarded to other listeners
+type SerfEventChan *chan serf.Event
+
+// RegisterEventNotifier registers an channel
+func (ms *MeshService) RegisterEventNotifier(key string, sec SerfEventChan) {
+	ms.serfEventNotifierMap[key] = sec
+}
+
+// DeregisterEventNotifier registers an channel
+func (ms *MeshService) DeregisterEventNotifier(key string) {
+	delete(ms.serfEventNotifierMap, key)
 }
 
 // NewMeshService creates a new MeshService for a node
 func NewMeshService(meshName string) MeshService {
 	return MeshService{
-		MeshName: meshName,
+		MeshName:             meshName,
+		creationTS:           time.Now(),
+		serfEventNotifierMap: make(map[string]SerfEventChan),
 	}
 }
 
 // SetNodeName applies a name to this node
-func (ms *MeshService) SetNodeName() {
+func (ms *MeshService) SetNodeName(name string) {
+	if name != "" {
+		ms.NodeName = name
+		return
+	}
+
+	// if no name is given, derive one from the
+	// IPv4 address
 	if len(ms.MeshIP.IP) == 16 {
 		i := int(ms.MeshIP.IP[12]) * 16777216
 		i += int(ms.MeshIP.IP[13]) * 65536
@@ -97,4 +129,15 @@ func (ms *MeshService) setRttResponseCh(ch *chan RTTResponse) {
 
 func (ms *MeshService) releaseRttResponseCh() {
 	ms.rttResponseChan = nil
+}
+
+// SetTimestamps sets the creation and join timestamp after grpc join call
+func (ms *MeshService) SetTimestamps(creationTS, joinTS int64) {
+	ms.creationTS = time.Unix(creationTS, 0)
+	ms.joinTS = time.Unix(joinTS, 0)
+}
+
+// GetTimestamps returns the creation and join timestamp
+func (ms *MeshService) GetTimestamps() (time.Time, time.Time) {
+	return ms.creationTS, ms.joinTS
 }

@@ -6,12 +6,15 @@ import (
 	"os"
 )
 
+// Runner is able to execute a single command
 type Runner interface {
 	Init([]string) error
 	Run() error
 	Name() string
 }
 
+// VersionInfo captures version information injected
+// by the build process
 type VersionInfo struct {
 	Version string
 	Commit  string
@@ -23,6 +26,7 @@ var cmds = []Runner{
 	NewJoinCommand(),
 	NewTagsCommand(),
 	NewRTTCommand(),
+	NewInfoCommand(),
 }
 
 // ProcessCommands takes the command line arguments and
