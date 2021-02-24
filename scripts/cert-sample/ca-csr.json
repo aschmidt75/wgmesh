@@ -1,0 +1,13 @@
+{
+    "CN": "www.somehwere.io",
+    "key": {
+      "algo": "rsa",
+      "size": 2048
+    },
+    "names": [
+      {
+        "C": "NZ",
+        "O": "SomeWhere Inc."
+      }
+    ]
+  }

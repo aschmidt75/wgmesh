@@ -34,7 +34,9 @@ func (ms *MeshService) NewSerfCluster() {
 	}
 	cfg.MemberlistConfig.LogOutput = cfg.LogOutput
 
-	// @TODO cfg.MemberlistConfig.SecretKey = ...
+	if len(ms.serfEncryptionKey) == 32 {
+		cfg.MemberlistConfig.SecretKey = ms.serfEncryptionKey
+	}
 
 	ms.cfg = cfg
 
@@ -54,11 +56,11 @@ func (ms *MeshService) StartSerfCluster(isBootstrap bool, pubkey string, endpoin
 		nodeType = "b"
 	}
 	tags := map[string]string{
-		"t":    nodeType,
-		"pk":   pubkey,
-		"addr": fmt.Sprintf("%s", endpointIP),
-		"port": fmt.Sprintf("%d", endpointPort),
-		"i":    meshIP,
+		"t":         nodeType,
+		"pk":        pubkey,
+		nodeTagAddr: fmt.Sprintf("%s", endpointIP),
+		nodeTagPort: fmt.Sprintf("%d", endpointPort),
+		"i":         meshIP,
 	}
 	log.WithField("tags", tags).Trace("setting tags for this node")
 	s.SetTags(tags)

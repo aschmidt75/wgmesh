@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,7 +20,7 @@ import (
 	meshservice "github.com/aschmidt75/wgmesh/meshservice"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"gortc.io/stun"
+	"google.golang.org/grpc/credentials"
 )
 
 // JoinCommand struct
@@ -32,8 +34,12 @@ type JoinCommand struct {
 	listenPort             int
 	listenIP               string
 	memberListFile         string
+	clientKey              string
+	clientCert             string
+	caCert                 string
 	agentGrpcBindSocket    string
 	agentGrpcBindSocketIDs string
+	devMode                bool
 }
 
 // NewJoinCommand creates the Join Command
@@ -41,24 +47,33 @@ func NewJoinCommand() *JoinCommand {
 	c := &JoinCommand{
 		CommandDefaults:        NewCommandDefaults(),
 		fs:                     flag.NewFlagSet("join", flag.ContinueOnError),
-		meshName:               "",
-		nodeName:               "",
-		endpoint:               "",
-		listenPort:             54540,
-		agentGrpcBindSocket:    "/var/run/wgmesh.sock",
-		agentGrpcBindSocketIDs: "",
-		memberListFile:         "",
+		meshName:               envStrWithDefault("WGMESH_MESH_NAME", ""),
+		nodeName:               envStrWithDefault("WGMESH_NODE_NAME", ""),
+		endpoint:               envStrWithDefault("WGMESH_WIREGUARD_BOOTSTRAP_ADDR", ""),
+		listenIP:               envStrWithDefault("WGMESH_WIREGUARD_LISTEN_ADDR", ""),
+		listenPort:             envIntWithDefault("WGMESH_WIREGUARD_LISTEN_PORT", 54540),
+		agentGrpcBindSocket:    envStrWithDefault("WGMESH_AGENT_GRPC_BIND_SOCKET", "/var/run/wgmesh.sock"),
+		agentGrpcBindSocketIDs: envStrWithDefault("WGMESH_AGENT_GRPC_BIND_SOCKET_ID", ""),
+		clientKey:              envStrWithDefault("WGMESH_CLIENT_KEY", ""),
+		clientCert:             envStrWithDefault("WGMESH_CLIENT_CERT", ""),
+		caCert:                 envStrWithDefault("WGMESH_CA_CERT", ""),
+		memberListFile:         envStrWithDefault("WGMESH_MEMBERLIST_FILE", ""),
+		devMode:                false,
 	}
 
-	c.fs.StringVar(&c.meshName, "name", c.meshName, "name of the mesh network")
-	c.fs.StringVar(&c.meshName, "n", c.meshName, "name of the mesh network (short)")
-	c.fs.StringVar(&c.nodeName, "node-name", c.nodeName, "(optional) name of this node")
-	c.fs.StringVar(&c.endpoint, "bootstrap-addr", c.endpoint, "IP:Port of remote mesh bootstrap node")
-	c.fs.IntVar(&c.listenPort, "listen-port", c.listenPort, "set the (external) wireguard listen port")
-	c.fs.StringVar(&c.listenIP, "listen-addr", c.listenIP, "set the (external) wireguard listen IP. May be an IP adress, or an interface name (e.g. eth0) or a numbered address on an interface (e.g. eth0%1)")
-	c.fs.StringVar(&c.agentGrpcBindSocket, "agent-grpc-bind-socket", c.agentGrpcBindSocket, "local socket file to bind grpc agent to")
-	c.fs.StringVar(&c.agentGrpcBindSocketIDs, "agent-grpc-bind-socket-id", c.agentGrpcBindSocketIDs, "<uid:gid> to change bind socket to")
-	c.fs.StringVar(&c.memberListFile, "memberlist-file", c.memberListFile, "optional name of file for a log of all current mesh members")
+	c.fs.StringVar(&c.meshName, "name", c.meshName, "name of the mesh network.\nenv:WGMESH_MESH_NAME")
+	c.fs.StringVar(&c.meshName, "n", c.meshName, "name of the mesh network (short).\nenv:WGMESH_MESH_NAME")
+	c.fs.StringVar(&c.nodeName, "node-name", c.nodeName, "(optional) name of this node.\nenv:WGMESH_NODE_NAME")
+	c.fs.StringVar(&c.endpoint, "bootstrap-addr", c.endpoint, "IP:Port of remote mesh bootstrap node.\nenv:WGMESH_WIREGUARD_BOOTSTRAP_ADDR")
+	c.fs.StringVar(&c.listenIP, "listen-addr", c.listenIP, "set the (external) wireguard listen IP. May be an IP address, or an interface name (e.g. eth0) or a numbered address on an interface (e.g. eth0%1).\nenv:WGMESH_WIREGUARD_LISTEN_ADDR")
+	c.fs.IntVar(&c.listenPort, "listen-port", c.listenPort, "set the (external) wireguard listen port.\nenv:WGMESH_WIREGUARD_LISTEN_PORT")
+	c.fs.StringVar(&c.agentGrpcBindSocket, "agent-grpc-bind-socket", c.agentGrpcBindSocket, "local socket file to bind grpc agent to.\nenv:WGMESH_AGENT_GRPC_BIND_SOCKET")
+	c.fs.StringVar(&c.agentGrpcBindSocketIDs, "agent-grpc-bind-socket-id", c.agentGrpcBindSocketIDs, "<uid:gid> to change bind socket to.\nenv:WGMESH_AGENT_GRPC_BIND_SOCKET_ID ")
+	c.fs.StringVar(&c.clientKey, "client-key", c.clientKey, "points to PEM-encoded private key to be used.\nenv:WGMESH_CLIENT_KEY")
+	c.fs.StringVar(&c.clientCert, "client-cert", c.clientCert, "points to PEM-encoded certificate be used.\nenv:WGMESH_CLIENT_CERT")
+	c.fs.StringVar(&c.caCert, "ca-cert", c.caCert, "points to PEM-encoded CA certificate.\nenv:WGMESH_CA_CERT")
+	c.fs.StringVar(&c.memberListFile, "memberlist-file", c.memberListFile, "optional name of file for a log of all current mesh members.\nenv:WGMESH_MEMBERLIST_FILE")
+	c.fs.BoolVar(&c.devMode, "dev", c.devMode, "Enables development mode which runs without encryption, authentication and without TLS")
 	c.DefaultFields(c.fs)
 
 	return c
@@ -108,6 +123,43 @@ func (g *JoinCommand) Init(args []string) error {
 		}
 	}
 
+	withGrpcSecure := false
+	if g.clientKey != "" {
+		withGrpcSecure = true
+
+		if !fileExists(g.clientKey) {
+			return fmt.Errorf("%s not found for -client-key", g.clientKey)
+		}
+	}
+	if g.clientCert != "" {
+		withGrpcSecure = true
+
+		if !fileExists(g.clientCert) {
+			return fmt.Errorf("%s not found for -client-cert", g.clientCert)
+		}
+	}
+	if g.caCert != "" {
+		withGrpcSecure = true
+
+		if !fileExists(g.caCert) {
+			return fmt.Errorf("%s not found for -ca-cert", g.caCert)
+		}
+	}
+
+	if withGrpcSecure {
+		if g.clientKey == "" || g.clientCert == "" || g.caCert == "" {
+			//
+			return fmt.Errorf("-client-key, -client-cert, -ca-cert must be specified together")
+		}
+	}
+
+	if g.devMode {
+		//		if withGrpcSecure || g.meshEncryptionKey != "" {
+		if withGrpcSecure {
+			return fmt.Errorf("cannot combine security parameters in -dev mode")
+		}
+	}
+
 	return nil
 }
 
@@ -120,34 +172,20 @@ func (g *JoinCommand) Run() error {
 
 	var listenIP net.IP
 	if g.listenIP == "" {
-		log.Info("Fetching external IP from STUN server")
-		// Creating a "connection" to STUN server.
-		c, err := stun.Dial("udp4", "stun.l.google.com:19302")
-		if err != nil {
-			return err
-		}
-		// Building binding request with random transaction id.
-		message, err := stun.Build(stun.TransactionID, stun.BindingRequest)
-		if err != nil {
-			return err
-		}
-		// Sending request to STUN server, waiting for response message.
-		if err := c.Do(message, func(res stun.Event) {
-			if res.Error != nil {
-				return
-			}
-			// Decoding XOR-MAPPED-ADDRESS attribute from message.
-			var xorAddr stun.XORMappedAddress
-			if err := xorAddr.GetFrom(res.Message); err != nil {
-				return
-			}
-			listenIP = xorAddr.IP
-			log.WithField("ip", listenIP).Info("Using external IP when connecting with mesh")
-		}); err != nil {
-			return err
-		}
-	} else {
 
+		st := meshservice.NewSTUNService()
+		ips, err := st.GetExternalIP()
+
+		if err != nil {
+			return err
+		}
+		if len(ips) > 0 {
+			listenIP = ips[0]
+			log.WithField("ip", listenIP).Info("Using external IP when connecting with mesh")
+
+		}
+	}
+	if listenIP == nil {
 		listenIP = getIPFromIPOrIntfParam(g.listenIP)
 		log.WithField("ip", listenIP).Trace("parsed -listen-addr")
 		if listenIP == nil {
@@ -157,9 +195,7 @@ func (g *JoinCommand) Run() error {
 	}
 
 	ms := meshservice.NewMeshService(g.meshName)
-	log.WithField("ms", ms).Trace(
-		"created",
-	)
+	log.WithField("ms", ms).Trace("created")
 	ms.WireguardListenIP = listenIP
 	ms.SetMemberlistExportFile(g.memberListFile)
 
@@ -169,9 +205,48 @@ func (g *JoinCommand) Run() error {
 	}
 	ms.WireguardPubKey = pk
 
-	conn, err := grpc.Dial(g.endpoint, grpc.WithInsecure(), grpc.WithBlock())
+	// set up TLS configuration from given parameters unless we're in dev mode
+	if !g.devMode {
+		ms.TLSConfig, err = meshservice.NewTLSConfigFromFiles(g.caCert, "", g.clientCert, g.clientKey)
+		if err != nil {
+
+			// remove wireguard interface
+			err = ms.RemoveWireguardInterfaceForMesh()
+			if err != nil {
+				log.Error(err)
+			}
+			return err
+		}
+	}
+
+	var opts []grpc.DialOption = []grpc.DialOption{
+		grpc.WithBlock(),
+		grpc.WithTimeout(5 * time.Second),
+	}
+	if ms.TLSConfig != nil {
+		transportCreds := credentials.NewTLS(&tls.Config{
+			Certificates: []tls.Certificate{ms.TLSConfig.Cert},
+			RootCAs:      ms.TLSConfig.CertPool,
+		})
+
+		opts = append(opts, grpc.WithTransportCredentials(transportCreds))
+		log.Debug("TLS-connecting to gRPC mesh service")
+
+	} else {
+		log.Warn("Using insecure connection to gRPC mesh service")
+		opts = append(opts, grpc.WithInsecure())
+	}
+
+	conn, err := grpc.Dial(g.endpoint, opts...)
 	if err != nil {
 		log.Error(err)
+
+		// remove wireguard interface
+		err = ms.RemoveWireguardInterfaceForMesh()
+		if err != nil {
+			log.Error(err)
+		}
+
 		return fmt.Errorf("cannot connect to %s", g.endpoint)
 	}
 	defer conn.Close()
@@ -213,6 +288,10 @@ func (g *JoinCommand) Run() error {
 
 	ms.SetTimestamps(joinResponse.CreationTS, time.Now().Unix())
 
+	if !g.devMode {
+		ms.SetEncryptionKey(string(joinResponse.SerfEncryptionKey))
+	}
+
 	// MeshIP ist composed of what user specifies using -ip, but
 	// with the net mask of -cidr. e.g. 10.232.0.0/16 with an
 	// IP of 10.232.5.99 becomes 10.232.5.99/16
@@ -228,8 +307,8 @@ func (g *JoinCommand) Run() error {
 		log.Error(err)
 		log.Error("Unable assign mesh ip. Exiting")
 
-		// TODO: inform bootstrap explicitely about this, because we're not able
-		// to inform the cluster via gossip.
+		// TODO: inform bootstrap explicitly about this, because we're not able
+		// to inform the cluster via gossip. Need to leave explicitly
 
 		// take down interface
 		err2 := ms.RemoveWireguardInterfaceForMesh()
@@ -239,6 +318,8 @@ func (g *JoinCommand) Run() error {
 		return err
 	}
 
+	// set my own node name. Can be empty, it is then derived from the
+	// local mesh ip to have unique names within the serf cluster
 	ms.SetNodeName(g.nodeName)
 
 	// query the list of all peers.
@@ -260,25 +341,70 @@ func (g *JoinCommand) Run() error {
 	// the interface is fully configured, up it
 	wg.SetInterfaceUp(ms.WireguardInterface)
 
-	// Add a route to the CIDR range of the mesh. All data
+	// Add a route to the CIDR range of the mesh. All detail data
 	// comes from the join response
 	_, meshCidr, _ := net.ParseCIDR(joinResponse.MeshCidr)
 	ms.CIDRRange = *meshCidr
 	err = ms.SetRoute()
 	if err != nil {
+		err2 := ms.RemoveWireguardInterfaceForMesh()
+		if err2 != nil {
+			return err2
+		}
 		return err
 	}
 
 	// start the serf part. make it join all received peers
 	err = g.serfSetup(&ms, listenIP, meshPeerIPs)
 	if err != nil {
+		err2 := ms.RemoveWireguardInterfaceForMesh()
+		if err2 != nil {
+			return err2
+		}
 		return err
 	}
 
 	err = g.grpcSetup(&ms)
 	if err != nil {
+		err2 := ms.RemoveWireguardInterfaceForMesh()
+		if err2 != nil {
+			return err2
+		}
 		return err
 	}
+
+	fmt.Printf("** \n")
+	fmt.Printf("** Mesh '%s' has been joined.\n", g.meshName)
+	fmt.Printf("** \n")
+	fmt.Printf("** Mesh name:                       %s\n", g.meshName)
+	fmt.Printf("** Mesh CIDR range:                 %s\n", ms.CIDRRange.String())
+	fmt.Printf("** This node's name:                %s\n", ms.NodeName)
+	fmt.Printf("** This node's mesh IP:             %s\n", ms.MeshIP.IP.String())
+	if g.memberListFile != "" {
+		fmt.Printf("** Mesh node details export to:     %s\n", g.memberListFile)
+	}
+	fmt.Printf("** \n")
+	if g.devMode {
+		fmt.Printf("** This mesh is running in DEVELOPMENT MODE without encryption.\n")
+		fmt.Printf("** Do not use this in a production setup.\n")
+		fmt.Printf("** \n")
+	} else {
+		if ms.TLSConfig != nil && len(ms.TLSConfig.Cert.Certificate) > 0 {
+			fmt.Printf("** TLS is enabled for gRPC mesh service\n")
+
+			x, err := x509.ParseCertificate(ms.TLSConfig.Cert.Certificate[0])
+			if err == nil {
+				fmt.Printf("**  subject: %s\n", x.Subject)
+				fmt.Printf("**  issuer: %s\n", x.Issuer)
+			}
+		}
+	}
+	fmt.Printf("** \n")
+	fmt.Printf("** To inspect the wireguard interface and its peer data use:\n")
+	fmt.Printf("** wg show %s\n", ms.WireguardInterface.InterfaceName)
+	fmt.Printf("** \n")
+	fmt.Printf("** To inspect the current mesh status use: wgmesh info\n")
+	fmt.Printf("** \n")
 
 	g.wait()
 

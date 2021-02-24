@@ -2,6 +2,7 @@ package meshservice
 
 import (
 	context "context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -11,6 +12,7 @@ import (
 	wgwrapper "github.com/aschmidt75/go-wg-wrapper/pkg/wgwrapper"
 	log "github.com/sirupsen/logrus"
 	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -27,7 +29,7 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 		}, nil
 	}
 
-	// choose a random ip adress from the adress pool of this node
+	// choose a random ip address from the address pool of this node
 	// which has not been used before
 	var mip net.IP
 	for {
@@ -76,8 +78,11 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 
 	log.WithFields(log.Fields{
 		"ip": mip.String(),
-		"pk": req.Pubkey,
 	}).Info("node joined mesh")
+	log.WithFields(log.Fields{
+		"ip": mip.String(),
+		"pk": req.Pubkey,
+	}).Debug("node joined mesh")
 
 	// send out a Peer Update as message to all serf nodes
 	peerAnnouncementBuf, _ := proto.Marshal(&Peer{
@@ -92,11 +97,12 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 
 	// return successful join response to client
 	return &JoinResponse{
-		Result:       JoinResponse_OK,
-		ErrorMessage: "",
-		JoinerMeshIP: mip.String(),
-		MeshCidr:     ms.CIDRRange.String(),
-		CreationTS:   int64(ms.creationTS.Unix()),
+		Result:            JoinResponse_OK,
+		ErrorMessage:      "",
+		JoinerMeshIP:      mip.String(),
+		MeshCidr:          ms.CIDRRange.String(),
+		CreationTS:        int64(ms.creationTS.Unix()),
+		SerfEncryptionKey: ms.GetEncryptionKey(),
 	}, nil
 }
 
@@ -105,10 +111,13 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 func (ms *MeshService) Peers(e *Empty, stream Mesh_PeersServer) error {
 	for _, member := range ms.s.Members() {
 		t := member.Tags
-		port, _ := strconv.Atoi(t["port"])
+
+		//log.WithField("t", t).Trace("Peers: sending member tags")
+
+		port, _ := strconv.Atoi(t[nodeTagPort])
 		err := stream.Send(&Peer{
 			Pubkey:       t["pk"],
-			EndpointIP:   t["addr"],
+			EndpointIP:   t[nodeTagAddr],
 			EndpointPort: int32(port),
 			MeshIP:       t["i"],
 			Type:         Peer_JOIN,
@@ -147,6 +156,16 @@ func newIPInNet(ipnet net.IPNet) (net.IP, error) {
 	return net.IPv4(newIP[0], newIP[1], newIP[2], newIP[3]), nil
 }
 
+func (ms *MeshService) newTLSCredentials() credentials.TransportCredentials {
+	return credentials.NewTLS(&tls.Config{
+		//ServerName: serverNameOverride,
+		InsecureSkipVerify: false,
+		ClientAuth:         tls.RequireAndVerifyClientCert,
+		Certificates:       []tls.Certificate{ms.TLSConfig.Cert},
+		ClientCAs:          ms.TLSConfig.CertPool,
+	})
+}
+
 // StartGrpcService ..
 func (ms *MeshService) StartGrpcService() error {
 	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", ms.GrpcBindAddr, ms.GrpcBindPort))
@@ -155,7 +174,13 @@ func (ms *MeshService) StartGrpcService() error {
 		return errors.New("unable to start grpc mesh service")
 	}
 
-	ms.grpcServer = grpc.NewServer()
+	if ms.TLSConfig != nil {
+		log.Debug("Starting TLS gRPC mesh service")
+		ms.grpcServer = grpc.NewServer(grpc.Creds(ms.newTLSCredentials()))
+	} else {
+		log.Warn("Starting an insecure gRPC mesh service")
+		ms.grpcServer = grpc.NewServer()
+	}
 	RegisterMeshServer(ms.grpcServer, ms)
 	if err := ms.grpcServer.Serve(lis); err != nil {
 		log.Errorf("failed to serve: %v", err)
@@ -177,7 +202,7 @@ func (ms *MeshService) isIPAvailable(ip net.IP) bool {
 	s := ip.String()
 
 	for _, member := range ms.s.Members() {
-		wgIP := member.Tags["addr"]
+		wgIP := member.Tags[nodeTagAddr]
 		if wgIP == s {
 			return false
 		}

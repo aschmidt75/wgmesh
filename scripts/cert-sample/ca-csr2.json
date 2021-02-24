@@ -1,0 +1,13 @@
+{
+    "CN": "www.nowherre.io",
+    "key": {
+      "algo": "rsa",
+      "size": 2048
+    },
+    "names": [
+      {
+        "C": "AU",
+        "O": "NoWhere Inc."
+      }
+    ]
+  }

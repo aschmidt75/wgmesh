@@ -3,7 +3,9 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
+	"strconv"
 )
 
 // Runner is able to execute a single command
@@ -33,8 +35,8 @@ var cmds = []Runner{
 // starts the processing according to the above defined commands
 func ProcessCommands(args []string, vi VersionInfo) error {
 	if len(args) < 1 {
-		DisplayHelp()
-		return errors.New("You must pass a sub-command")
+		DisplayHelp(vi)
+		return errors.New("please use one of the above commands")
 	}
 
 	subcommand := os.Args[1]
@@ -55,4 +57,49 @@ func ProcessCommands(args []string, vi VersionInfo) error {
 	}
 
 	return fmt.Errorf("Unknown subcommand: %s", subcommand)
+}
+
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
+
+func dirExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return info.IsDir()
+}
+
+func envStrWithDefault(key string, defaultValue string) string {
+	res := os.Getenv(key)
+	if res == "" {
+		return defaultValue
+	}
+	return res
+}
+
+func envIntWithDefault(key string, defaultValue int) int {
+	res := os.Getenv(key)
+	if res == "" {
+		return defaultValue
+	}
+	v, err := strconv.Atoi(res)
+	if err != nil {
+		return -1
+	}
+	return v
+}
+
+func randomMeshName() string {
+	chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, 10)
+	for i := range b {
+		b[i] = chars[rand.Intn(len(chars))]
+	}
+	return string(b)
 }

@@ -227,7 +227,7 @@ func peerAdder(ms *MeshService, wg wgwrapper.WireguardWrapper, peerCh <-chan *Pe
 				ListenPort:       int(peer.EndpointPort),
 				Pubkey:           peer.Pubkey,
 				AllowedIPs: []net.IPNet{
-					net.IPNet{
+					{
 						IP:   net.ParseIP(peer.MeshIP),
 						Mask: net.CIDRMask(32, 32),
 					},

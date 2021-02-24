@@ -9,6 +9,7 @@ import (
 
 	"time"
 
+	"github.com/hashicorp/serf/serf"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -55,7 +56,6 @@ func (ms *MeshService) updateMemberExport() {
 		myCoord = nil
 	}
 
-	svcKeyRe := regexp.MustCompile(`^svc:`)
 	for _, member := range ms.s.Members() {
 		em := exportedMember{
 			Addr:   member.Addr.String(),
@@ -75,55 +75,7 @@ func (ms *MeshService) updateMemberExport() {
 		e.Members[member.Name] = em
 
 		// grab tags for service entries, put into service map
-		for k, v := range member.Tags {
-			arr := svcKeyRe.Split(k, 2)
-			if arr != nil && len(arr) == 2 && arr[1] != "" {
-
-				expSvc, ex := e.Services[arr[1]]
-				if !ex {
-					expSvc = exportedService{
-						Tags:  make(map[string]string),
-						Nodes: make([]string, 0),
-					}
-				}
-
-				// put member on the node list
-				expSvc.Nodes = append(expSvc.Nodes, member.Name)
-
-				// Split value
-				arrV := strings.Split(v, ",")
-				for _, elemV := range arrV {
-					arrE := strings.Split(elemV, "=")
-
-					if len(arrE) > 0 {
-						ek := arrE[0]
-
-						if ek == "port" && len(arrE) == 2 {
-							expSvc.Port, _ = strconv.Atoi(arrE[1])
-							continue
-						}
-						/*if ek == "addr" && len(arrE) == 2 {
-							expSvc.Addr = arrE[1]
-							continue
-						}*/
-						// put into general tags otherwise
-						if len(arrE) >= 1 {
-							ek = arrE[0]
-						}
-						ev := ""
-						if len(arrE) == 2 {
-							ev = arrE[1]
-						}
-						expSvc.Tags[ek] = ev
-
-					}
-				}
-
-				e.Services[arr[1]] = expSvc
-
-			}
-		}
-
+		ms.processTagsForMember(&member, e)
 	}
 
 	content, err := json.MarshalIndent(e, "", " ")
@@ -131,7 +83,56 @@ func (ms *MeshService) updateMemberExport() {
 		log.WithError(err).Error("unable to write to file")
 	}
 
-	err = ioutil.WriteFile(ms.memberExportFile, content, 0640)
+	ioutil.WriteFile(ms.memberExportFile, content, 0640)
 
 	ms.lastExportedTS = ms.lastUpdatedTS
+}
+
+func (ms *MeshService) processTagsForMember(member *serf.Member, e *exportedMemberList) {
+	svcKeyRe := regexp.MustCompile(`^svc:`)
+	for k, v := range member.Tags {
+		arr := svcKeyRe.Split(k, 2)
+		if arr != nil && len(arr) == 2 && arr[1] != "" {
+
+			expSvc, ex := e.Services[arr[1]]
+			if !ex {
+				expSvc = exportedService{
+					Tags:  make(map[string]string),
+					Nodes: make([]string, 0),
+				}
+			}
+
+			// put member on the node list
+			expSvc.Nodes = append(expSvc.Nodes, member.Name)
+
+			// Split value
+			arrV := strings.Split(v, ",")
+			for _, elemV := range arrV {
+				arrE := strings.Split(elemV, "=")
+
+				if len(arrE) > 0 {
+					ek := arrE[0]
+
+					if ek == "port" && len(arrE) == 2 {
+						expSvc.Port, _ = strconv.Atoi(arrE[1])
+						continue
+					}
+					// put into general tags otherwise
+					if len(arrE) >= 1 {
+						ek = arrE[0]
+					}
+					ev := ""
+					if len(arrE) == 2 {
+						ev = arrE[1]
+					}
+					expSvc.Tags[ek] = ev
+
+				}
+			}
+
+			e.Services[arr[1]] = expSvc
+
+		}
+	}
+
 }

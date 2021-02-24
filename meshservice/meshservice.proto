@@ -72,6 +72,9 @@ message JoinResponse {
 
     // creation time stamp
     int64 creationTS = 5;
+
+    // encryption key for serf gossip protocol
+    string serfEncryptionKey = 6;
 }
 
 message LeaveRequest {

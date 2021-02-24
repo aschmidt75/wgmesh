@@ -1,6 +1,7 @@
 package meshservice
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net"
 	"time"
@@ -44,9 +45,13 @@ type MeshService struct {
 	// Bind port for gRPC Mesh service
 	GrpcBindPort int
 
+	// (optional) TLS config struct for gRPC Mesh service
+	TLSConfig *TLSConfig
+
 	// Serf
-	cfg *serf.Config
-	s   *serf.Serf
+	cfg               *serf.Config
+	s                 *serf.Serf
+	serfEncryptionKey []byte
 
 	// if set, exports the serf member list to this file
 	memberExportFile string
@@ -75,6 +80,13 @@ type MeshService struct {
 	serfEventNotifierMap map[string]SerfEventChan
 }
 
+const (
+	nodeTagPort = "_port"
+	nodeTagAddr = "_addr"
+
+//	nodeTag = "_"
+)
+
 // SerfEventChan is a pointer to a channel of serf events,
 // so that events can be forwarded to other listeners
 type SerfEventChan *chan serf.Event
@@ -95,6 +107,7 @@ func NewMeshService(meshName string) MeshService {
 		MeshName:             meshName,
 		creationTS:           time.Now(),
 		serfEventNotifierMap: make(map[string]SerfEventChan),
+		serfEncryptionKey:    make([]byte, 0),
 	}
 }
 
@@ -140,4 +153,19 @@ func (ms *MeshService) SetTimestamps(creationTS, joinTS int64) {
 // GetTimestamps returns the creation and join timestamp
 func (ms *MeshService) GetTimestamps() (time.Time, time.Time) {
 	return ms.creationTS, ms.joinTS
+}
+
+// SetEncryptionKey sets serf encryption key from a base64 string
+func (ms *MeshService) SetEncryptionKey(encKeyB64 string) error {
+	var err error
+	ms.serfEncryptionKey, err = base64.StdEncoding.DecodeString(encKeyB64)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetEncryptionKey returns serf encryption key from a base64 string
+func (ms *MeshService) GetEncryptionKey() string {
+	return base64.StdEncoding.EncodeToString(ms.serfEncryptionKey)
 }

@@ -1,0 +1,16 @@
+{
+    "hosts": [
+      "localhost"
+    ],
+    "CN": "wgmesh-join",
+    "key": {
+      "algo": "rsa",
+      "size": 2048
+    },
+    "names": [
+      {
+        "C": "NZ",
+        "O": "SomeWhere Inc."
+      }
+    ]
+}
