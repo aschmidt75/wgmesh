@@ -18,7 +18,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MeshClient interface {
-	// Joiner node starts to shake hands and receives a token and
+	// Joining node starts to shake hands and receives a token and
 	// additional authorization requirements
 	ShakeHands(ctx context.Context, in *HandshakeRequest, opts ...grpc.CallOption) (*HandshakeResponse, error)
 	// BeginJoin begins the join process by sending a JoinRequest
@@ -90,7 +90,7 @@ func (x *meshPeersClient) Recv() (*Peer, error) {
 // All implementations must embed UnimplementedMeshServer
 // for forward compatibility
 type MeshServer interface {
-	// Joiner node starts to shake hands and receives a token and
+	// Joining node starts to shake hands and receives a token and
 	// additional authorization requirements
 	ShakeHands(context.Context, *HandshakeRequest) (*HandshakeResponse, error)
 	// BeginJoin begins the join process by sending a JoinRequest

@@ -29,21 +29,21 @@
 
 This command is for bootstrap nodes only.
 
-* `ip` (default 10.232.1.1 for bootstrap nodes, not used for joiner nodes) private IP of this node. This needs to be specified for the bootstrap nodes. wgmesh will take this ip address on the wireguard interface for itself.
+* `ip` (default 10.232.1.1 for bootstrap nodes, not used for joining nodes) private IP of this node. This needs to be specified for the bootstrap nodes. wgmesh will take this ip address on the wireguard interface for itself.
 * `cidr` (default 10.232.0.0/16) This is the private network in CIDR notation. All nodes joining the mesh will be assigned an IP address within this address space.
 * `grpc-bind-addr` (default 0.0.0.0 only applies for bootstrap nodes) Bind address for the public gRPC service of bootstrap nodes
 * `grpc-bind-port`(default 5000 only for bootstrap nodes) TCP port number for the public gRPC service
 * `grpc-server-key` points to the PEM-encoded private key. This is used for the external gRPC service.
 * `grpc-server-cert` points to the PEM-encoded certificate.
-* `grpc-ca-cert` points to a PEM-encoded CA certificate used to authenticate joiner nodes. Mutually exlusive with `grpc-ca-path`
-* `grpc-ca-path` points to a directory where PEM-encoded certificates reside. They are used to authenticate joiner nodes. Mutually exlusive with `grpc-ca-cert`
+* `grpc-ca-cert` points to a PEM-encoded CA certificate used to authenticate joining nodes. Mutually exlusive with `grpc-ca-path`
+* `grpc-ca-path` points to a directory where PEM-encoded certificates reside. They are used to authenticate joining nodes. Mutually exlusive with `grpc-ca-cert`
 * `mesh-encryption-key` (optional) base64-encoded, 32 bytes symmetric encryption key used to encrypt internal mesh traffic. If this is left out, wgmesh will assign a randomized key. 
 
 ### `join`
 
-This command is for joiner nodes only
+This command is for joining nodes only
 
-* `bootstrap-addr` (mandatory, only for joiner nodes) Address (IP:port) of the gRPC service of a bootstrap node. 
+* `bootstrap-addr` (mandatory, only for joining nodes) Address (IP:port) of the gRPC service of a bootstrap node. 
 * `client-key` points to the PEM-encoded private key. This is used when connecting to the bootstrap node. 
 * `client-cert` points to the PEM-encoded certificate. This must be recognized by the bootstrap mode (see there `grpc-ca-cert` or  `grpc-ca-path`)
 * `ca-cert` points to a PEM-encoded CA certificate 

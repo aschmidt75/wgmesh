@@ -5,7 +5,7 @@ package meshservice;
 option go_package = "github.com/aschmidt75/wgmesh/meshservice";
 
 service Mesh {
-    // Joiner node starts to shake hands and receives a token and
+    // Joining node starts to shake hands and receives a token and
     // additional authorization requirements
     rpc ShakeHands(HandshakeRequest) returns (HandshakeResponse) {}
 
@@ -34,22 +34,22 @@ message HandshakeResponse {
     Result result = 1;
     string errorMessage = 2;
 
-    // token which joiner node has to reuse when using Join/Peers methods
+    // token which joining node has to reuse when using Join/Peers methods
     string joinToken = 3;
 
-    // additional authorization requirements which joiner nodes have to fulfil
+    // additional authorization requirements which joining nodes have to fulfil
     map<string,string> authzReqs = 4;
 }
 
 
 message JoinRequest {
-    // wireguard: public key of joiner node
+    // wireguard: public key of joining node
     string pubkey = 1;
 
-    // wireguard: endpoint IP of joiner node
+    // wireguard: endpoint IP of joining node
     string endpointIP = 2;
 
-    // wireguard: endpoint UDP port of joiner node
+    // wireguard: endpoint UDP port of joining node
     int32 endpointPort = 3;
 
     // name of mesh to join
@@ -64,8 +64,8 @@ message JoinResponse {
     Result result = 1;
     string errorMessage = 2;
 
-    // this will be the joiner's mesh ip
-    string joinerMeshIP = 3;
+    // this will be the joining's mesh ip
+    string joiningNodeMeshIP = 3;
 
     // cidr of the mesh
     string meshCidr = 4;

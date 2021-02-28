@@ -56,7 +56,10 @@ func (as *MeshAgentServer) Info(ctx context.Context, ae *AgentEmpty) (*MeshInfo,
 
 // Tag ...
 func (as *MeshAgentServer) Tag(ctx context.Context, tr *TagRequest) (*TagResult, error) {
-	log.WithField("tr", *tr).Trace("agent: Tag requested")
+	log.WithFields(log.Fields{
+		"k": tr.Key,
+		"v": tr.Value,
+	}).Trace("agent: Tag requested")
 
 	t := as.ms.s.LocalMember().Tags
 	t[tr.Key] = tr.Value
@@ -74,7 +77,10 @@ func (as *MeshAgentServer) Tag(ctx context.Context, tr *TagRequest) (*TagResult,
 
 // Untag ...
 func (as *MeshAgentServer) Untag(ctx context.Context, tr *TagRequest) (*TagResult, error) {
-	log.WithField("tr", *tr).Trace("agent: Untag requested")
+	log.WithFields(log.Fields{
+		"k": tr.Key,
+		"v": tr.Value,
+	}).Trace("agent: Untag requested")
 
 	t := as.ms.s.LocalMember().Tags
 
@@ -165,8 +171,6 @@ func (as *MeshAgentServer) WaitForChangeInMesh(wi *WaitInfo, server Agent_WaitFo
 			return nil
 		}
 	}
-
-	return nil
 }
 
 // RTT ...
@@ -180,7 +184,7 @@ func (as *MeshAgentServer) RTT(cte *AgentEmpty, rttServer Agent_RTTServer) error
 		for {
 			select {
 			case rtt := <-ch:
-				log.WithField("rtt", rtt).Trace("RTT")
+				//log.WithField("rtt", rtt).Trace("RTT")
 
 				rtts := make([]*RTTNodeInfo, len(rtt.Rtts))
 				for idx, rttResponseInfo := range rtt.Rtts {

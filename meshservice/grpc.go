@@ -23,9 +23,9 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 
 	if req.MeshName != ms.MeshName {
 		return &JoinResponse{
-			Result:       JoinResponse_ERROR,
-			ErrorMessage: "Unknown mesh",
-			JoinerMeshIP: "",
+			Result:            JoinResponse_ERROR,
+			ErrorMessage:      "Unknown mesh",
+			JoiningNodeMeshIP: "",
 		}, nil
 	}
 
@@ -63,16 +63,16 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 	if err != nil {
 		log.Error(err)
 		return &JoinResponse{
-			Result:       JoinResponse_ERROR,
-			ErrorMessage: "Unable to add peer",
-			JoinerMeshIP: "",
+			Result:            JoinResponse_ERROR,
+			ErrorMessage:      "Unable to add peer",
+			JoiningNodeMeshIP: "",
 		}, nil
 	}
 	if !ok && err == nil {
 		return &JoinResponse{
-			Result:       JoinResponse_ERROR,
-			ErrorMessage: "Peer already present",
-			JoinerMeshIP: "",
+			Result:            JoinResponse_ERROR,
+			ErrorMessage:      "Peer already present",
+			JoiningNodeMeshIP: "",
 		}, nil
 	}
 
@@ -99,7 +99,7 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 	return &JoinResponse{
 		Result:            JoinResponse_OK,
 		ErrorMessage:      "",
-		JoinerMeshIP:      mip.String(),
+		JoiningNodeMeshIP: mip.String(),
 		MeshCidr:          ms.CIDRRange.String(),
 		CreationTS:        int64(ms.creationTS.Unix()),
 		SerfEncryptionKey: ms.GetEncryptionKey(),

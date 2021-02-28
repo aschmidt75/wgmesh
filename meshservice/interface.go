@@ -106,8 +106,8 @@ func (ms *MeshService) CreateWireguardInterface(wgListenPort int) (string, error
 	return wgi.PublicKey, nil
 }
 
-// AssignJoinerIP sets the ip address of the wireguard interface
-func (ms *MeshService) AssignJoinerIP(ip string) error {
+// AssignJoiningNodeIP sets the ip address of the wireguard interface
+func (ms *MeshService) AssignJoiningNodeIP(ip string) error {
 	intfName := fmt.Sprintf("wg%s", ms.MeshName)
 
 	intf, err := net.InterfaceByName(intfName)

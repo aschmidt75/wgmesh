@@ -175,10 +175,21 @@ func (g *BootstrapCommand) Init(args []string) error {
 		}
 	}
 
+	// when secure setup is desired ..
 	if withGrpcSecure {
+		// then we need these settings..
 		if g.grpcServerKey == "" || g.grpcServerCert == "" || (g.grpcCaCert == "" && g.grpcCaPath == "") {
 			//
 			return fmt.Errorf("-grpc-server-key, -grpc-server-cert, -grpc-ca-cert / -grp-ca-path must be specified together")
+		}
+		// and we cannot have dev mode also
+		if g.devMode {
+			return fmt.Errorf("Must either set -dev mode for insecure setup or -grpc-server-key, -grpc-server-cert, -grpc-ca-cert / -grp-ca-path must be specified together")
+		}
+	} else {
+		// in a non-secure setup we definitely need -dev mode
+		if !g.devMode {
+			return fmt.Errorf("Must either set -dev mode for insecure setup or -grpc-server-key, -grpc-server-cert, -grpc-ca-cert / -grp-ca-path must be specified together")
 		}
 	}
 
@@ -188,7 +199,7 @@ func (g *BootstrapCommand) Init(args []string) error {
 
 	if g.devMode {
 		if withGrpcSecure || g.meshEncryptionKey != "" {
-			return fmt.Errorf("cannot combine security parameters in -dev mode")
+			return fmt.Errorf("cannot combine security parameters -mesh-encryption-key in -dev mode")
 		}
 	}
 
@@ -305,7 +316,7 @@ func (g *BootstrapCommand) Run() error {
 		fmt.Printf("** This mesh is running in DEVELOPMENT MODE without encryption.\n")
 		fmt.Printf("** Do not use this in a production setup.\n")
 		fmt.Printf("** \n")
-		fmt.Printf("** To have another node join this mesh, use this command (only for non-NATed setups with public ip):\n")
+		fmt.Printf("** To have another node join this mesh, use this command:\n")
 		ba := ms.GrpcBindAddr
 		if ba == "0.0.0.0" {
 			ba = "<PUBLIC_IP_OF_THIS_NODE>"

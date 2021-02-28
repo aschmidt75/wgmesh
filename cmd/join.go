@@ -151,10 +151,16 @@ func (g *JoinCommand) Init(args []string) error {
 			//
 			return fmt.Errorf("-client-key, -client-cert, -ca-cert must be specified together")
 		}
+		if g.devMode {
+			return fmt.Errorf("Must either set -dev mode for insecure setup or -client-key, -client-cert, -ca-cert must be specified together")
+		}
+	} else {
+		if !g.devMode {
+			return fmt.Errorf("Must either set -dev mode for insecure setup or -client-key, -client-cert, -ca-cert must be specified together")
+		}
 	}
 
 	if g.devMode {
-		//		if withGrpcSecure || g.meshEncryptionKey != "" {
 		if withGrpcSecure {
 			return fmt.Errorf("cannot combine security parameters in -dev mode")
 		}
@@ -296,13 +302,13 @@ func (g *JoinCommand) Run() error {
 	// with the net mask of -cidr. e.g. 10.232.0.0/16 with an
 	// IP of 10.232.5.99 becomes 10.232.5.99/16
 	ms.MeshIP = net.IPNet{
-		IP:   net.ParseIP(joinResponse.JoinerMeshIP),
+		IP:   net.ParseIP(joinResponse.JoiningNodeMeshIP),
 		Mask: ms.CIDRRange.Mask,
 	}
 	log.WithField("meship", ms.MeshIP).Trace("using mesh ip")
 
 	// we have been assigned a local IP for the wireguard interface. Apply it.
-	err = ms.AssignJoinerIP(joinResponse.JoinerMeshIP)
+	err = ms.AssignJoiningNodeIP(joinResponse.JoiningNodeMeshIP)
 	if err != nil {
 		log.Error(err)
 		log.Error("Unable assign mesh ip. Exiting")
