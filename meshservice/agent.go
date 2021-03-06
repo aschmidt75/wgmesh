@@ -29,6 +29,10 @@ type MeshAgentServer struct {
 	ms *MeshService
 }
 
+func (as *MeshAgentServer) meshService() *MeshService {
+	return as.ms
+}
+
 // NewMeshAgentServerSocket creates a new agent service for a local bind socket
 func NewMeshAgentServerSocket(ms *MeshService, grpcBindSocket string, grpcBindSocketID string) *MeshAgentServer {
 	return &MeshAgentServer{
@@ -43,27 +47,27 @@ func NewMeshAgentServerSocket(ms *MeshService, grpcBindSocket string, grpcBindSo
 func (as *MeshAgentServer) Info(ctx context.Context, ae *AgentEmpty) (*MeshInfo, error) {
 	log.Trace("agent: Info requested")
 
-	creationTS, nodeJoinTS := as.ms.GetTimestamps()
+	creationTS, nodeJoinTS := as.meshService().GetTimestamps()
 
 	return &MeshInfo{
-		Name:          as.ms.MeshName,
-		NodeName:      as.ms.NodeName,
-		NodeCount:     int32(as.ms.s.NumNodes()),
+		Name:          as.meshService().MeshName,
+		NodeName:      as.meshService().NodeName,
+		NodeCount:     int32(as.meshService().Serf().NumNodes()),
 		MeshCeationTS: int64(creationTS.Unix()),
 		NodeJoinTS:    int64(nodeJoinTS.Unix()),
 	}, nil
 }
 
 // Tag ...
-func (as *MeshAgentServer) Tag(ctx context.Context, tr *TagRequest) (*TagResult, error) {
+func (as *MeshAgentServer) Tag(ctx context.Context, tr *NodeTag) (*TagResult, error) {
 	log.WithFields(log.Fields{
 		"k": tr.Key,
 		"v": tr.Value,
 	}).Trace("agent: Tag requested")
 
-	t := as.ms.s.LocalMember().Tags
+	t := as.meshService().Serf().LocalMember().Tags
 	t[tr.Key] = tr.Value
-	err := as.ms.s.SetTags(t)
+	err := as.meshService().Serf().SetTags(t)
 	if err != nil {
 		log.WithError(err).Error("unable to set tags at serf node")
 		return &TagResult{
@@ -76,13 +80,13 @@ func (as *MeshAgentServer) Tag(ctx context.Context, tr *TagRequest) (*TagResult,
 }
 
 // Untag ...
-func (as *MeshAgentServer) Untag(ctx context.Context, tr *TagRequest) (*TagResult, error) {
+func (as *MeshAgentServer) Untag(ctx context.Context, tr *NodeTag) (*TagResult, error) {
 	log.WithFields(log.Fields{
 		"k": tr.Key,
 		"v": tr.Value,
 	}).Trace("agent: Untag requested")
 
-	t := as.ms.s.LocalMember().Tags
+	t := as.meshService().Serf().LocalMember().Tags
 
 	if _, ex := t[tr.Key]; ex == false {
 		return &TagResult{
@@ -92,7 +96,7 @@ func (as *MeshAgentServer) Untag(ctx context.Context, tr *TagRequest) (*TagResul
 
 	delete(t, tr.Key)
 
-	err := as.ms.s.SetTags(t)
+	err := as.meshService().Serf().SetTags(t)
 	if err != nil {
 		log.WithError(err).Error("unable to set tags at serf node")
 		return &TagResult{
@@ -104,19 +108,32 @@ func (as *MeshAgentServer) Untag(ctx context.Context, tr *TagRequest) (*TagResul
 	}, nil
 }
 
+// Tags streams all current tags of the local node
+func (as *MeshAgentServer) Tags(cte *AgentEmpty, server Agent_TagsServer) error {
+	for key, value := range as.meshService().Serf().LocalMember().Tags {
+		if err := server.Send(&NodeTag{
+			Key:   key,
+			Value: value,
+		}); err != nil {
+			log.WithError(err).Error("unable to stream send tag")
+		}
+	}
+	return nil
+}
+
 // Nodes ...
 func (as *MeshAgentServer) Nodes(cte *AgentEmpty, agentNodesServer Agent_NodesServer) error {
 	log.Trace("agent: Nodes requested")
 
-	myCoord, err := as.ms.s.GetCoordinate()
+	myCoord, err := as.meshService().Serf().GetCoordinate()
 	if err != nil {
 		log.WithError(err).Warn("Unable to get my own coordinate, check config")
 		return err
 	}
 
-	for _, member := range as.ms.s.Members() {
+	for _, member := range as.meshService().Serf().Members() {
 		var rtt int32 = 0
-		memberCoord, ok := as.ms.s.GetCachedCoordinate(member.Name)
+		memberCoord, ok := as.meshService().Serf().GetCachedCoordinate(member.Name)
 		if ok && memberCoord != nil {
 			d := memberCoord.DistanceTo(myCoord)
 			rtt = int32(d / time.Millisecond)
@@ -151,19 +168,19 @@ func (as *MeshAgentServer) WaitForChangeInMesh(wi *WaitInfo, server Agent_WaitFo
 
 	ch := make(chan serf.Event)
 	key := fmt.Sprintf("agent-waitforchange-%d", rand.Int63n(math.MaxInt64))
-	as.ms.RegisterEventNotifier(key, &ch)
+	as.meshService().RegisterEventNotifier(key, &ch)
 
 	for {
 		select {
 		case <-ch:
-			as.ms.DeregisterEventNotifier(key)
+			as.meshService().DeregisterEventNotifier(key)
 			server.Send(&WaitResponse{
 				WasTimeout:     false,
 				ChangesOccured: true,
 			})
 			return nil
 		case <-time.After(time.Duration(wi.TimeoutSecs) * time.Second):
-			as.ms.DeregisterEventNotifier(key)
+			as.meshService().DeregisterEventNotifier(key)
 			server.Send(&WaitResponse{
 				WasTimeout:     true,
 				ChangesOccured: false,
@@ -206,16 +223,16 @@ func (as *MeshAgentServer) RTT(cte *AgentEmpty, rttServer Agent_RTTServer) error
 			}
 		}
 	}()
-	as.ms.setRttResponseCh(&ch)
+	as.meshService().setRttResponseCh(&ch)
 
 	// send a user event which makes all nodes report their rtts
 	rttRequestBuf, _ := proto.Marshal(&RTTRequest{
-		RequestedBy: as.ms.NodeName,
+		RequestedBy: as.meshService().NodeName,
 	})
-	as.ms.s.UserEvent(serfEventMarkerRTTReq, []byte(rttRequestBuf), true)
+	as.meshService().Serf().UserEvent(serfEventMarkerRTTReq, []byte(rttRequestBuf), true)
 
 	// wait until all are collected and streamed out
-	time.Sleep(time.Duration(as.ms.s.NumNodes()+2) * time.Second)
+	time.Sleep(time.Duration(as.meshService().Serf().NumNodes()+2) * time.Second)
 
 	// done
 	doneCh <- struct{}{}

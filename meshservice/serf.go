@@ -84,23 +84,23 @@ func (ms *MeshService) JoinSerfCluster(clusterNodes []string) {
 	log.WithField("l", clusterNodes).Trace("cluster node list")
 
 	log.Debugf("Joining serf cluster via %d nodes", len(clusterNodes))
-	ms.s.Join(clusterNodes, true)
+	ms.Serf().Join(clusterNodes, true)
 }
 
 // LeaveSerfCluster leaves the cluster
 func (ms *MeshService) LeaveSerfCluster() {
-	ms.s.Leave()
+	ms.Serf().Leave()
 
 	time.Sleep(3 * time.Second)
 	log.Info("Left the serf cluster")
 
-	ms.s.Shutdown()
+	ms.Serf().Shutdown()
 	log.Debug("Shut down the serf instance")
 }
 
 // StatsUpdate produces a mesh statistic update on log
 func (ms *MeshService) StatsUpdate() {
-	log.WithField("stats", ms.s.Stats()).Debug("serf cluster statistics")
+	log.WithField("stats", ms.Serf().Stats()).Debug("serf cluster statistics")
 }
 
 type statsContent struct {
@@ -109,7 +109,7 @@ type statsContent struct {
 
 func (ms *MeshService) getStats() *statsContent {
 	return &statsContent{
-		numNodes: ms.s.NumNodes(),
+		numNodes: ms.Serf().NumNodes(),
 	}
 }
 
@@ -136,13 +136,13 @@ func (ms *MeshService) StartStatsUpdater() {
 
 				if last == nil {
 					last = ms.getStats()
-					log.Infof("Mesh has %d nodes", ms.s.NumNodes())
+					log.Infof("Mesh has %d nodes", ms.Serf().NumNodes())
 				} else {
 
 					s := ms.getStats()
 					if reflect.DeepEqual(*last, *s) == false {
 						last = s
-						log.Infof("Mesh has %d nodes", ms.s.NumNodes())
+						log.Infof("Mesh has %d nodes", ms.Serf().NumNodes())
 					}
 				}
 			}

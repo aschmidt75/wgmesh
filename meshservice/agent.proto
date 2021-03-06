@@ -17,10 +17,13 @@ service Agent {
     rpc WaitForChangeInMesh(WaitInfo) returns (stream WaitResponse) {}
 
     // Tag sets a tag on a wgmesh node
-    rpc Tag(TagRequest) returns (TagResult) {}
+    rpc Tag(NodeTag) returns (TagResult) {}
 
     // Untag remove a tag on a wgmesh node
-    rpc Untag(TagRequest) returns (TagResult) {}
+    rpc Untag(NodeTag) returns (TagResult) {}
+
+    // Tags streams all tags of the local node
+    rpc Tags(AgentEmpty) returns (stream NodeTag) {}
 
     // RTT yields the complete rtt timings for all nodes
     rpc RTT(AgentEmpty) returns (stream RTTInfo) {}
@@ -48,6 +51,7 @@ message MemberInfo {
     string status = 3;
     int32 rttMsec = 4;
     repeated MemberInfoTag tags = 5;
+    bool isLocalNode = 6;
 }
 
 message RTTNodeInfo {
@@ -60,14 +64,13 @@ message RTTInfo {
     repeated RTTNodeInfo rtts = 2;
 }
 
+message NodeTag {
+    string key = 1;
+    string value = 2;
+}
 
 message TagResult {
     bool ok = 1;
-}
-
-message TagRequest {
-    string key = 1;
-    string value = 2;
 }
 
 message WaitInfo {

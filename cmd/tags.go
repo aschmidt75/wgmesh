@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -55,14 +56,13 @@ func (g *TagsCommand) Init(args []string) error {
 	}
 	g.ProcessDefaults()
 
-	if g.tagStr == "" && g.deleteFlag == "" {
-		return errors.New("Either set a tag using -set key=value or delete a tag using -delete=key")
-	}
-
 	if g.tagStr != "" {
 		arr := strings.Split(g.tagStr, "=")
 		if len(arr) < 2 {
-			return errors.New("Set a tag using -tag key=value")
+			return errors.New("Set a tag using -set=key=value")
+		}
+		if strings.HasPrefix(arr[0], "_") {
+			return errors.New("Tag keys may not start with underscore _")
 		}
 	}
 
@@ -92,8 +92,37 @@ func (g *TagsCommand) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	if g.tagStr == "" && g.deleteFlag == "" {
+		// show all tags
+		client, err := agent.Tags(ctx, &meshservice.AgentEmpty{})
+		if err != nil {
+			log.Error(err)
+			return fmt.Errorf("cannot communicate with endpoint at %s", endpoint)
+		}
+
+		c := 0
+		for {
+			tag, err := client.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.WithError(err).Debug("error while retrieving tag list")
+				break
+			}
+			if !strings.HasPrefix(tag.Key, "_") {
+				fmt.Printf("%s=%s\n", tag.Key, tag.Value)
+				c++
+			}
+		}
+		if c == 0 {
+			fmt.Println("no tags")
+		}
+		return nil
+	}
+
 	if g.deleteFlag != "" {
-		r, err := agent.Untag(ctx, &meshservice.TagRequest{
+		r, err := agent.Untag(ctx, &meshservice.NodeTag{
 			Key: g.deleteFlag,
 		})
 		if err != nil {
@@ -107,12 +136,12 @@ func (g *TagsCommand) Run() error {
 		} else {
 			log.Error("Tag not deleted")
 		}
+	}
 
-	} else {
-
+	if g.tagStr != "" {
 		arr := strings.SplitN(g.tagStr, "=", 2)
 
-		r, err := agent.Tag(ctx, &meshservice.TagRequest{
+		r, err := agent.Tag(ctx, &meshservice.NodeTag{
 			Key:   arr[0],
 			Value: arr[1],
 		})

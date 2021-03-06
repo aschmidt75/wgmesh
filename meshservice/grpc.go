@@ -110,7 +110,7 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 		MeshIP:       targetWGIP.IP.String(),
 	})
 	// send out a join request event
-	ms.s.UserEvent(serfEventMarkerJoin, []byte(peerAnnouncementBuf), true)
+	ms.Serf().UserEvent(serfEventMarkerJoin, []byte(peerAnnouncementBuf), true)
 
 	// return successful join response to client
 	return &JoinResponse{
@@ -126,7 +126,7 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 // Peers serves a list of all current peers, starting with this node.
 // All data is derived from serf's memberlist
 func (ms *MeshService) Peers(e *Empty, stream Mesh_PeersServer) error {
-	for _, member := range ms.s.Members() {
+	for _, member := range ms.Serf().Members() {
 		t := member.Tags
 
 		//log.WithField("t", t).Trace("Peers: sending member tags")
@@ -218,7 +218,7 @@ func (ms *MeshService) StopGrpcService() {
 func (ms *MeshService) isIPAvailable(ip net.IP) bool {
 	s := ip.String()
 
-	for _, member := range ms.s.Members() {
+	for _, member := range ms.Serf().Members() {
 		wgIP := member.Tags[nodeTagAddr]
 		if wgIP == s {
 			return false

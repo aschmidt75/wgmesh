@@ -50,20 +50,20 @@ func (ms *MeshService) updateMemberExport() {
 		Services:   make(map[string]exportedService),
 		LastUpdate: ms.lastUpdatedTS.Unix(),
 	}
-	myCoord, err := ms.s.GetCoordinate()
+	myCoord, err := ms.Serf().GetCoordinate()
 	if err != nil {
 		log.WithError(err).Warn("Unable to get my own coordinate, check config")
 		myCoord = nil
 	}
 
-	for _, member := range ms.s.Members() {
+	for _, member := range ms.Serf().Members() {
 		em := exportedMember{
 			Addr:   member.Addr.String(),
 			Status: member.Status.String(),
 			Tags:   member.Tags,
 		}
 		// compute RTT if we have all distances
-		memberCoord, ok := ms.s.GetCachedCoordinate(member.Name)
+		memberCoord, ok := ms.Serf().GetCachedCoordinate(member.Name)
 		if ok && memberCoord != nil {
 			d := memberCoord.DistanceTo(myCoord)
 			em.RTT = int64(d / time.Millisecond)

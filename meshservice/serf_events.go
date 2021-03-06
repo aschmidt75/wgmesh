@@ -55,19 +55,19 @@ func (ms *MeshService) serfHandleJoinRequestEvent(userEv serf.UserEvent) {
 func (ms *MeshService) serfHandleRTTRequestEvent(userEv serf.UserEvent) {
 	go func(ms *MeshService) {
 		//
-		sl := rand.Intn(ms.s.NumNodes() * 1000)
+		sl := rand.Intn(ms.Serf().NumNodes() * 1000)
 		log.WithField("msec", sl).Trace("Delaying rtt response")
 		time.Sleep(time.Duration(sl) * time.Millisecond)
 
 		// compose my own rtt list
-		myCoord, err := ms.s.GetCoordinate()
+		myCoord, err := ms.Serf().GetCoordinate()
 		if err != nil {
 			log.WithError(err).Warn("Unable to get my own coordinate, check config")
 			return
 		}
-		rtts := make([]*RTTResponseInfo, ms.s.NumNodes())
-		for idx, member := range ms.s.Members() {
-			memberCoord, ok := ms.s.GetCachedCoordinate(member.Name)
+		rtts := make([]*RTTResponseInfo, ms.Serf().NumNodes())
+		for idx, member := range ms.Serf().Members() {
+			memberCoord, ok := ms.Serf().GetCachedCoordinate(member.Name)
 			if ok && memberCoord != nil {
 				d := memberCoord.DistanceTo(myCoord)
 				rtts[idx] = &RTTResponseInfo{
@@ -86,7 +86,7 @@ func (ms *MeshService) serfHandleRTTRequestEvent(userEv serf.UserEvent) {
 			log.WithError(err).Error("Unable to marshal rtt response message")
 			return
 		}
-		ms.s.UserEvent(serfEventMarkerRTTRes, []byte(rttResponseBuf), true)
+		ms.Serf().UserEvent(serfEventMarkerRTTRes, []byte(rttResponseBuf), true)
 
 	}(ms)
 }
@@ -117,7 +117,7 @@ func (ms *MeshService) serfHandleMemberEvent(ev serf.MemberEvent) {
 			log.WithError(err).Error("unable to remove failed/left wireguard peer")
 		}
 
-		err = ms.s.RemoveFailedNodePrune(member.Name)
+		err = ms.Serf().RemoveFailedNodePrune(member.Name)
 		if err != nil {
 			log.WithError(err).Error("unable to remove failed/left serf node")
 		} else {

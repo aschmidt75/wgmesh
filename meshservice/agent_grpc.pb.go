@@ -26,9 +26,11 @@ type AgentClient interface {
 	// has occured
 	WaitForChangeInMesh(ctx context.Context, in *WaitInfo, opts ...grpc.CallOption) (Agent_WaitForChangeInMeshClient, error)
 	// Tag sets a tag on a wgmesh node
-	Tag(ctx context.Context, in *TagRequest, opts ...grpc.CallOption) (*TagResult, error)
+	Tag(ctx context.Context, in *NodeTag, opts ...grpc.CallOption) (*TagResult, error)
 	// Untag remove a tag on a wgmesh node
-	Untag(ctx context.Context, in *TagRequest, opts ...grpc.CallOption) (*TagResult, error)
+	Untag(ctx context.Context, in *NodeTag, opts ...grpc.CallOption) (*TagResult, error)
+	// Tags streams all tags of the local node
+	Tags(ctx context.Context, in *AgentEmpty, opts ...grpc.CallOption) (Agent_TagsClient, error)
 	// RTT yields the complete rtt timings for all nodes
 	RTT(ctx context.Context, in *AgentEmpty, opts ...grpc.CallOption) (Agent_RTTClient, error)
 }
@@ -114,7 +116,7 @@ func (x *agentWaitForChangeInMeshClient) Recv() (*WaitResponse, error) {
 	return m, nil
 }
 
-func (c *agentClient) Tag(ctx context.Context, in *TagRequest, opts ...grpc.CallOption) (*TagResult, error) {
+func (c *agentClient) Tag(ctx context.Context, in *NodeTag, opts ...grpc.CallOption) (*TagResult, error) {
 	out := new(TagResult)
 	err := c.cc.Invoke(ctx, "/meshservice.Agent/Tag", in, out, opts...)
 	if err != nil {
@@ -123,7 +125,7 @@ func (c *agentClient) Tag(ctx context.Context, in *TagRequest, opts ...grpc.Call
 	return out, nil
 }
 
-func (c *agentClient) Untag(ctx context.Context, in *TagRequest, opts ...grpc.CallOption) (*TagResult, error) {
+func (c *agentClient) Untag(ctx context.Context, in *NodeTag, opts ...grpc.CallOption) (*TagResult, error) {
 	out := new(TagResult)
 	err := c.cc.Invoke(ctx, "/meshservice.Agent/Untag", in, out, opts...)
 	if err != nil {
@@ -132,8 +134,40 @@ func (c *agentClient) Untag(ctx context.Context, in *TagRequest, opts ...grpc.Ca
 	return out, nil
 }
 
+func (c *agentClient) Tags(ctx context.Context, in *AgentEmpty, opts ...grpc.CallOption) (Agent_TagsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Agent_ServiceDesc.Streams[2], "/meshservice.Agent/Tags", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &agentTagsClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Agent_TagsClient interface {
+	Recv() (*NodeTag, error)
+	grpc.ClientStream
+}
+
+type agentTagsClient struct {
+	grpc.ClientStream
+}
+
+func (x *agentTagsClient) Recv() (*NodeTag, error) {
+	m := new(NodeTag)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *agentClient) RTT(ctx context.Context, in *AgentEmpty, opts ...grpc.CallOption) (Agent_RTTClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Agent_ServiceDesc.Streams[2], "/meshservice.Agent/RTT", opts...)
+	stream, err := c.cc.NewStream(ctx, &Agent_ServiceDesc.Streams[3], "/meshservice.Agent/RTT", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -176,9 +210,11 @@ type AgentServer interface {
 	// has occured
 	WaitForChangeInMesh(*WaitInfo, Agent_WaitForChangeInMeshServer) error
 	// Tag sets a tag on a wgmesh node
-	Tag(context.Context, *TagRequest) (*TagResult, error)
+	Tag(context.Context, *NodeTag) (*TagResult, error)
 	// Untag remove a tag on a wgmesh node
-	Untag(context.Context, *TagRequest) (*TagResult, error)
+	Untag(context.Context, *NodeTag) (*TagResult, error)
+	// Tags streams all tags of the local node
+	Tags(*AgentEmpty, Agent_TagsServer) error
 	// RTT yields the complete rtt timings for all nodes
 	RTT(*AgentEmpty, Agent_RTTServer) error
 	mustEmbedUnimplementedAgentServer()
@@ -197,11 +233,14 @@ func (UnimplementedAgentServer) Nodes(*AgentEmpty, Agent_NodesServer) error {
 func (UnimplementedAgentServer) WaitForChangeInMesh(*WaitInfo, Agent_WaitForChangeInMeshServer) error {
 	return status.Errorf(codes.Unimplemented, "method WaitForChangeInMesh not implemented")
 }
-func (UnimplementedAgentServer) Tag(context.Context, *TagRequest) (*TagResult, error) {
+func (UnimplementedAgentServer) Tag(context.Context, *NodeTag) (*TagResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Tag not implemented")
 }
-func (UnimplementedAgentServer) Untag(context.Context, *TagRequest) (*TagResult, error) {
+func (UnimplementedAgentServer) Untag(context.Context, *NodeTag) (*TagResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Untag not implemented")
+}
+func (UnimplementedAgentServer) Tags(*AgentEmpty, Agent_TagsServer) error {
+	return status.Errorf(codes.Unimplemented, "method Tags not implemented")
 }
 func (UnimplementedAgentServer) RTT(*AgentEmpty, Agent_RTTServer) error {
 	return status.Errorf(codes.Unimplemented, "method RTT not implemented")
@@ -280,7 +319,7 @@ func (x *agentWaitForChangeInMeshServer) Send(m *WaitResponse) error {
 }
 
 func _Agent_Tag_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TagRequest)
+	in := new(NodeTag)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -292,13 +331,13 @@ func _Agent_Tag_Handler(srv interface{}, ctx context.Context, dec func(interface
 		FullMethod: "/meshservice.Agent/Tag",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentServer).Tag(ctx, req.(*TagRequest))
+		return srv.(AgentServer).Tag(ctx, req.(*NodeTag))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _Agent_Untag_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TagRequest)
+	in := new(NodeTag)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -310,9 +349,30 @@ func _Agent_Untag_Handler(srv interface{}, ctx context.Context, dec func(interfa
 		FullMethod: "/meshservice.Agent/Untag",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentServer).Untag(ctx, req.(*TagRequest))
+		return srv.(AgentServer).Untag(ctx, req.(*NodeTag))
 	}
 	return interceptor(ctx, in, info, handler)
+}
+
+func _Agent_Tags_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(AgentEmpty)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AgentServer).Tags(m, &agentTagsServer{stream})
+}
+
+type Agent_TagsServer interface {
+	Send(*NodeTag) error
+	grpc.ServerStream
+}
+
+type agentTagsServer struct {
+	grpc.ServerStream
+}
+
+func (x *agentTagsServer) Send(m *NodeTag) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _Agent_RTT_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -365,6 +425,11 @@ var Agent_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WaitForChangeInMesh",
 			Handler:       _Agent_WaitForChangeInMesh_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "Tags",
+			Handler:       _Agent_Tags_Handler,
 			ServerStreams: true,
 		},
 		{
