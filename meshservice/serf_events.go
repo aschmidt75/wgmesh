@@ -22,6 +22,7 @@ func (ms *MeshService) serfHandleJoinRequestEvent(userEv serf.UserEvent) {
 	log.WithField("pa", peerAnnouncement).Trace("user event: peerAnnouncement")
 
 	if peerAnnouncement.Type == Peer_JOIN {
+
 		wg := wgwrapper.New()
 		ok, err := wg.AddPeer(ms.WireguardInterface, wgwrapper.WireguardPeer{
 			RemoteEndpointIP: peerAnnouncement.EndpointIP,
@@ -85,7 +86,7 @@ func (ms *MeshService) serfHandleRTTRequestEvent(userEv serf.UserEvent) {
 			log.WithError(err).Error("Unable to marshal rtt response message")
 			return
 		}
-		ms.s.UserEvent("rtt1", []byte(rttResponseBuf), true)
+		ms.s.UserEvent(serfEventMarkerRTTRes, []byte(rttResponseBuf), true)
 
 	}(ms)
 }
@@ -111,7 +112,7 @@ func (ms *MeshService) serfHandleMemberEvent(ev serf.MemberEvent) {
 		// remove this peer from wireguard interface
 		wg := wgwrapper.New()
 
-		err := wg.RemovePeerByPubkey(ms.WireguardInterface, member.Tags["pk"])
+		err := wg.RemovePeerByPubkey(ms.WireguardInterface, member.Tags[nodeTagPubKey])
 		if err != nil {
 			log.WithError(err).Error("unable to remove failed/left wireguard peer")
 		}
@@ -147,17 +148,17 @@ func (ms *MeshService) serfEventHandler(ch <-chan serf.Event) {
 			if ev.EventType() == serf.EventUser {
 				userEv := ev.(serf.UserEvent)
 
-				if userEv.Name == "j" {
+				if userEv.Name == serfEventMarkerJoin {
 					log.WithField("ev", userEv).Debug("received join request event")
-					ms.serfHandleJoinRequestEvent(userEv)
+					go ms.serfHandleJoinRequestEvent(userEv)
 				}
-				if userEv.Name == "rtt0" {
+				if userEv.Name == serfEventMarkerRTTReq {
 					log.WithField("ev", userEv).Debug("received rtt request event")
-					ms.serfHandleRTTRequestEvent(userEv)
+					go ms.serfHandleRTTRequestEvent(userEv)
 				}
-				if userEv.Name == "rtt1" {
+				if userEv.Name == serfEventMarkerRTTRes {
 					log.WithField("ev", userEv).Debug("received rtt response event")
-					ms.serfHandleRTTResponseEvent(userEv)
+					go ms.serfHandleRTTResponseEvent(userEv)
 				}
 
 			}
@@ -180,7 +181,7 @@ func (ms *MeshService) serfEventHandler(ch <-chan serf.Event) {
 				log.WithField("members", evMember.Members).Debug("received leave/failed event")
 				ms.lastUpdatedTS = time.Now()
 
-				ms.serfHandleMemberEvent(evMember)
+				go ms.serfHandleMemberEvent(evMember)
 
 			}
 

@@ -17,9 +17,9 @@ import (
 // NewSerfCluster sets up a cluster with a given nodeName,
 // a bind address. it also registers a user event listener
 // which acts upon Join and Leave user messages
-func (ms *MeshService) NewSerfCluster() {
+func (ms *MeshService) NewSerfCluster(lanMode bool) {
 
-	cfg := serfCustomWANConfig(ms.NodeName, ms.MeshIP.IP.String())
+	cfg := serfCustomConfig(ms.NodeName, ms.MeshIP.IP.String(), lanMode)
 
 	// set up the event handler for all user events
 	ch := make(chan serf.Event, 1)
@@ -42,6 +42,13 @@ func (ms *MeshService) NewSerfCluster() {
 
 }
 
+func (ms *MeshService) isNodeNameInUse(nodeName string) bool {
+	if nodeName == "" {
+		return false
+	}
+	return false
+}
+
 // StartSerfCluster is used by bootstrap to set up the initial serf cluster node
 // A set of node tags is derived from all parameters so that other nodes have
 // all data to connect.
@@ -56,11 +63,11 @@ func (ms *MeshService) StartSerfCluster(isBootstrap bool, pubkey string, endpoin
 		nodeType = "b"
 	}
 	tags := map[string]string{
-		"t":         nodeType,
-		"pk":        pubkey,
-		nodeTagAddr: fmt.Sprintf("%s", endpointIP),
-		nodeTagPort: fmt.Sprintf("%d", endpointPort),
-		"i":         meshIP,
+		nodeTagNodeType: nodeType,
+		nodeTagPubKey:   pubkey,
+		nodeTagAddr:     fmt.Sprintf("%s", endpointIP),
+		nodeTagPort:     fmt.Sprintf("%d", endpointPort),
+		nodeTagMeshIP:   meshIP,
 	}
 	log.WithField("tags", tags).Trace("setting tags for this node")
 	s.SetTags(tags)
@@ -155,9 +162,15 @@ func (ms *MeshService) StartStatsUpdater() {
 	}()
 }
 
-func serfCustomWANConfig(nodeName string, bindAddr string) *serf.Config {
+func serfCustomConfig(nodeName string, bindAddr string, lanMode bool) *serf.Config {
 
-	ml := memberlist.DefaultLANConfig()
+	var ml *memberlist.Config
+
+	if lanMode {
+		ml = memberlist.DefaultLANConfig()
+	} else {
+		ml = memberlist.DefaultWANConfig()
+	}
 	ml.BindPort = 5353
 	ml.BindAddr = bindAddr
 

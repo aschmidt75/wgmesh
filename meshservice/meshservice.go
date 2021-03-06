@@ -64,7 +64,7 @@ type MeshService struct {
 	UnimplementedMeshServer
 	grpcServer *grpc.Server
 
-	// Agent gRPC
+	// Local agent gRPC server
 	MeshAgentServer *MeshAgentServer
 
 	// when the first bootstrap node started this mesh
@@ -81,10 +81,15 @@ type MeshService struct {
 }
 
 const (
-	nodeTagPort = "_port"
-	nodeTagAddr = "_addr"
+	nodeTagPort     = "_port"
+	nodeTagAddr     = "_addr"
+	nodeTagPubKey   = "_pk"
+	nodeTagMeshIP   = "_i"
+	nodeTagNodeType = "_t"
 
-//	nodeTag = "_"
+	serfEventMarkerJoin   = "_j"
+	serfEventMarkerRTTReq = "_rtt0"
+	serfEventMarkerRTTRes = "_rtt1"
 )
 
 // SerfEventChan is a pointer to a channel of serf events,
@@ -168,4 +173,9 @@ func (ms *MeshService) SetEncryptionKey(encKeyB64 string) error {
 // GetEncryptionKey returns serf encryption key from a base64 string
 func (ms *MeshService) GetEncryptionKey() string {
 	return base64.StdEncoding.EncodeToString(ms.serfEncryptionKey)
+}
+
+// Serf returns the serf instance
+func (ms *MeshService) Serf() *serf.Serf {
+	return ms.s
 }

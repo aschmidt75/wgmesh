@@ -83,6 +83,17 @@ func envStrWithDefault(key string, defaultValue string) string {
 	return res
 }
 
+func envBoolWithDefault(key string, defaultValue bool) bool {
+	res := os.Getenv(key)
+	if res == "" {
+		return defaultValue
+	}
+	if res == "1" || res == "true" || res == "on" {
+		return true
+	}
+	return false
+}
+
 func envIntWithDefault(key string, defaultValue int) int {
 	res := os.Getenv(key)
 	if res == "" {

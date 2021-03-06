@@ -1,4 +1,5 @@
 # wgmesh
+
 Automatically build private wireguard mesh networks.
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/aschmidt75/wgmesh)](https://goreportcard.com/report/github.com/aschmidt75/wgmesh)
@@ -15,7 +16,7 @@ Automatically build private wireguard mesh networks.
 
 ## Build
 
-The default targets of `Makefile` generate protobug and grpc parts and build the binary in `dist/`
+The default targets of `Makefile` generate protobuf and grpc parts and build the binary in `dist/`
 
 ```bash
 $ make
@@ -31,11 +32,12 @@ $ make release
 
 * Linux
 * Wireguard module installed/enabled in kernel
-* Works best with a non-NATed setup. Usually works with NAT, but limitations may apply.
+* Works best with a non-NATed setup. It can work with NAT, but there's no guarantee.
 
-## Use
+## Usage
 
 The fastest way to start a mesh is using the development mode, either with a bunch of local virtual machine or with available cloud instances.
+[This walkthrough](docs/multipass-demo-setup.md) shows how to use it with local multipass-based ubuntu lts instances.
 
 The mesh is initiated with a first bootstrap node. It creates a wireguard interface and starts listening for join requests on a gRPC endpoint. Make sure that the bootstrap node is not behind a NAT. In development mode, no security/TLS/mesh encryption is enforced, so all other nodes can join with authentication. This simplifies testing but is not suitable for non-development purposes.
 
@@ -66,11 +68,11 @@ For other nodes to join, the (public or private) IP address of the bootstrap nod
 ```bash
 # wgmesh join -v -dev -n xoJbYw07PM -bootstrap-addr 10.0.0.0:5000
 
-INFO[2021/02/26 15:46:31] Fetching external IP from STUN server
-INFO[2021/02/26 15:46:31] Using external IP when connecting with mesh   ip=
-INFO[2021/02/26 15:46:31] Created and configured wireguard interface wgxoJbYw07PM as no-up
-WARN[2021/02/26 15:46:31] Using insecure connection to gRPC mesh service
-INFO[2021/02/26 15:46:32] Starting gRPC Agent Service at /var/run/wgmesh.sock
+INFO[2021/02/27 10:46:31] Fetching external IP from STUN server
+INFO[2021/02/27 10:46:31] Using external IP when connecting with mesh   ip=
+INFO[2021/02/27 10:46:31] Created and configured wireguard interface wgxoJbYw07PM as no-up
+WARN[2021/02/27 10:46:31] Using insecure connection to gRPC mesh service
+INFO[2021/02/27 10:46:32] Starting gRPC Agent Service at /var/run/wgmesh.sock
 **
 ** Mesh 'xoJbYw07PM' has been joined.
 **
@@ -87,7 +89,7 @@ INFO[2021/02/26 15:46:32] Starting gRPC Agent Service at /var/run/wgmesh.sock
 **
 ** To inspect the current mesh status use: wgmesh info
 **
-INFO[2021/02/26 15:46:33] Mesh has 2 nodes
+INFO[2021/02/27 10:46:33] Mesh has 2 nodes
 ```
 
 Additional nodes can join using the same `join` command.
@@ -110,3 +112,5 @@ xoJbYw07PMAE80101 |10.232.1.1     |alive  |38  | _addr=, _port=54540, |
 
 (C) 2020,2021 @aschmidt75 
 Apache License, Version 2.0
+
+Wireguard ist a registered trademark of Jason A. Donenfeld / [wireguard.com](https://wireguard.com)

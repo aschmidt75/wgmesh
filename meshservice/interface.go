@@ -12,6 +12,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+func intfNameForMesh(meshName string) string {
+	return fmt.Sprintf("wg%s", meshName)
+}
+
 // CreateWireguardInterfaceForMesh creates a new wireguard interface based on the
 // name of the mesh, a bootstrap IP and a listen port. The interfacae is also up'ed.
 func (ms *MeshService) CreateWireguardInterfaceForMesh(bootstrapIP string, wgListenPort int) (string, error) {
@@ -20,7 +24,7 @@ func (ms *MeshService) CreateWireguardInterfaceForMesh(bootstrapIP string, wgLis
 		"ip": bootstrapIP,
 	}).Trace("CreateWireguardInterfaceForMesh")
 
-	intfName := fmt.Sprintf("wg%s", ms.MeshName)
+	intfName := intfNameForMesh(ms.MeshName)
 
 	ms.WireguardListenPort = wgListenPort
 
@@ -70,7 +74,7 @@ func (ms *MeshService) CreateWireguardInterface(wgListenPort int) (string, error
 		"n": ms.MeshName,
 	}).Trace("CreateWireguardInterface")
 
-	intfName := fmt.Sprintf("wg%s", ms.MeshName)
+	intfName := intfNameForMesh(ms.MeshName)
 
 	ms.WireguardListenPort = wgListenPort
 
@@ -108,7 +112,7 @@ func (ms *MeshService) CreateWireguardInterface(wgListenPort int) (string, error
 
 // AssignJoiningNodeIP sets the ip address of the wireguard interface
 func (ms *MeshService) AssignJoiningNodeIP(ip string) error {
-	intfName := fmt.Sprintf("wg%s", ms.MeshName)
+	intfName := intfNameForMesh(ms.MeshName)
 
 	intf, err := net.InterfaceByName(intfName)
 	if err != nil {
@@ -160,13 +164,14 @@ func (ms *MeshService) SetRoute() error {
 	return nil
 }
 
-// RemoveWireguardInterfaceForMesh ..
+// RemoveWireguardInterfaceForMesh removes the wireguard interface for this mesh
+// Removing the interface will also remove the route(s) associated with it.
 func (ms *MeshService) RemoveWireguardInterfaceForMesh() error {
 	log.WithFields(log.Fields{
 		"n": ms.MeshName,
 	}).Trace("RemoveWireguardInterfaceForMesh")
 
-	intfName := fmt.Sprintf("wg%s", ms.MeshName)
+	intfName := intfNameForMesh(ms.MeshName)
 
 	i, err := net.InterfaceByName(intfName)
 	if err != nil {

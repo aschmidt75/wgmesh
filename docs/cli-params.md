@@ -38,6 +38,7 @@ This command is for bootstrap nodes only.
 * `grpc-ca-cert` points to a PEM-encoded CA certificate used to authenticate joining nodes. Mutually exlusive with `grpc-ca-path`
 * `grpc-ca-path` points to a directory where PEM-encoded certificates reside. They are used to authenticate joining nodes. Mutually exlusive with `grpc-ca-cert`
 * `mesh-encryption-key` (optional) base64-encoded, 32 bytes symmetric encryption key used to encrypt internal mesh traffic. If this is left out, wgmesh will assign a randomized key. 
+* `serf-mode-lan` if set to true, use the LAN mode defaults for Serf, otherwise use the WAN mode defaults (e.g. timeouts, fan-outs etc.). This is set on the bootstrap node only and will be propagated to joining nodes.
 
 ### `join`
 

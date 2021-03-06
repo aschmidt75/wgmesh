@@ -4,7 +4,6 @@ import (
 	context "context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"math/rand"
 	"net"
 	"strconv"
@@ -40,11 +39,28 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 		}
 	}
 
+	// TODO: check if joining node wishes to have a explicit node name
+	// if so, check if this name is already in use.
+	if ms.isNodeNameInUse(req.NodeName) {
+		return &JoinResponse{
+			Result:            JoinResponse_ERROR,
+			ErrorMessage:      "Request node name is already in use",
+			JoiningNodeMeshIP: "",
+		}, nil
+	}
+
+	//
 	targetWGIP := net.IPNet{
 		mip,
 		net.CIDRMask(32, 32),
 	}
 
+	/*
+		keepAliveSeconds := 0
+		if req.Nat {
+			keepAliveSeconds = 20
+		}
+	*/
 	// take public key and endpoint, add as peer to own wireguard interface
 	p := wgwrapper.WireguardPeer{
 		RemoteEndpointIP: req.EndpointIP,
@@ -54,6 +70,7 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 			targetWGIP,
 		},
 		Psk: nil,
+		//PersistentKeepaliveInterval: time.Duration(keepAliveSeconds) * time.Second,
 	}
 	log.WithField("peer", p).Trace("Adding peer")
 
@@ -92,8 +109,8 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 		EndpointPort: int32(req.EndpointPort),
 		MeshIP:       targetWGIP.IP.String(),
 	})
-	// send out a join request event "j"
-	ms.s.UserEvent("j", []byte(peerAnnouncementBuf), true)
+	// send out a join request event
+	ms.s.UserEvent(serfEventMarkerJoin, []byte(peerAnnouncementBuf), true)
 
 	// return successful join response to client
 	return &JoinResponse{
@@ -116,10 +133,10 @@ func (ms *MeshService) Peers(e *Empty, stream Mesh_PeersServer) error {
 
 		port, _ := strconv.Atoi(t[nodeTagPort])
 		err := stream.Send(&Peer{
-			Pubkey:       t["pk"],
+			Pubkey:       t[nodeTagPubKey],
 			EndpointIP:   t[nodeTagAddr],
 			EndpointPort: int32(port),
-			MeshIP:       t["i"],
+			MeshIP:       t[nodeTagMeshIP],
 			Type:         Peer_JOIN,
 		})
 		if err != nil {
@@ -168,7 +185,7 @@ func (ms *MeshService) newTLSCredentials() credentials.TransportCredentials {
 
 // StartGrpcService ..
 func (ms *MeshService) StartGrpcService() error {
-	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", ms.GrpcBindAddr, ms.GrpcBindPort))
+	lis, err := net.Listen("tcp", net.JoinHostPort(ms.GrpcBindAddr, strconv.Itoa(ms.GrpcBindPort)))
 	if err != nil {
 		log.Errorf("failed to listen: %v", err)
 		return errors.New("unable to start grpc mesh service")

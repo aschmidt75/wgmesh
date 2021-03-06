@@ -151,7 +151,7 @@ func (g *InfoCommand) singleCycle(ctx context.Context, agent meshservice.AgentCl
 
 		tagStr := ""
 		for _, tag := range memberInfo.Tags {
-			if tag.Key != "i" && tag.Key != "addr" && tag.Key != "t" && tag.Key != "pk" && tag.Key != "port" {
+			if tag.Key[0] != '_' {
 				tagStr = fmt.Sprintf("%s %s=%s,", tagStr, tag.Key, tag.Value)
 			}
 		}

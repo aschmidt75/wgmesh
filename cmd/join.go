@@ -203,6 +203,7 @@ func (g *JoinCommand) Run() error {
 	ms := meshservice.NewMeshService(g.meshName)
 	log.WithField("ms", ms).Trace("created")
 	ms.WireguardListenIP = listenIP
+
 	ms.SetMemberlistExportFile(g.memberListFile)
 
 	pk, err := ms.CreateWireguardInterface(g.listenPort)
@@ -268,6 +269,7 @@ func (g *JoinCommand) Run() error {
 		EndpointIP:   listenIP.String(),
 		EndpointPort: int32(g.listenPort),
 		MeshName:     g.meshName,
+		NodeName:     g.nodeName,
 	})
 	if err != nil {
 		log.Error(err)
@@ -361,7 +363,7 @@ func (g *JoinCommand) Run() error {
 	}
 
 	// start the serf part. make it join all received peers
-	err = g.serfSetup(&ms, listenIP, meshPeerIPs)
+	err = g.serfSetup(&ms, listenIP, meshPeerIPs, joinResponse.SerfModeLAN)
 	if err != nil {
 		err2 := ms.RemoveWireguardInterfaceForMesh()
 		if err2 != nil {
@@ -437,8 +439,9 @@ func (g *JoinCommand) grpcSetup(ms *meshservice.MeshService) (err error) {
 }
 
 // serfSetup ...
-func (g *JoinCommand) serfSetup(ms *meshservice.MeshService, listenIP net.IP, meshIPs []string) (err error) {
-	ms.NewSerfCluster()
+func (g *JoinCommand) serfSetup(ms *meshservice.MeshService, listenIP net.IP, meshIPs []string, lanMode bool) (err error) {
+
+	ms.NewSerfCluster(lanMode)
 
 	err = ms.StartSerfCluster(false, ms.WireguardPubKey, listenIP.String(), g.listenPort, ms.MeshIP.IP.String())
 	if err != nil {

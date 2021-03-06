@@ -39,6 +39,7 @@ type BootstrapCommand struct {
 	agentGrpcBindSocketIDs string
 	meshEncryptionKey      string
 	devMode                bool
+	serfModeLAN            bool
 }
 
 // NewBootstrapCommand creates the Bootstrap Command
@@ -63,6 +64,7 @@ func NewBootstrapCommand() *BootstrapCommand {
 		memberListFile:         envStrWithDefault("WGMESH_MEMBERLIST_FILE", ""),
 		meshEncryptionKey:      envStrWithDefault("WGMESH_ENCRYPTION_KEY", ""),
 		devMode:                false,
+		serfModeLAN:            envBoolWithDefault("WGMESH_SERF_MODE_LAN", false),
 	}
 
 	c.fs.StringVar(&c.meshName, "name", c.meshName, "name of the mesh network.\nenv:WGMESH_MESH_NAME")
@@ -83,6 +85,7 @@ func NewBootstrapCommand() *BootstrapCommand {
 	c.fs.StringVar(&c.memberListFile, "memberlist-file", c.memberListFile, "optional name of file for a log of all current mesh members.\nenv:WGMESH_MEMBERLIST_FILE")
 	c.fs.StringVar(&c.meshEncryptionKey, "mesh-encryption-key", c.meshEncryptionKey, "optional key for symmetric encryption of internal mesh traffic. Must be 32 Bytes base64-ed.\nenv:WGMESH_ENCRYPTION_KEY")
 	c.fs.BoolVar(&c.devMode, "dev", c.devMode, "Enables development mode which runs without encryption, authentication and without TLS")
+	c.fs.BoolVar(&c.serfModeLAN, "serf-mode-lan", c.serfModeLAN, "Activates LAN mode or cluster communication. Default is false (=WAN mode).\nenv:WGMESH_SERF_MODE_LAN")
 	c.DefaultFields(c.fs)
 
 	return c
@@ -242,7 +245,6 @@ func (g *BootstrapCommand) Run() error {
 		if len(ips) > 0 {
 			wgListenAddr = ips[0]
 			log.WithField("ip", wgListenAddr).Info("Using external IP when connecting with mesh")
-
 		}
 	}
 	if wgListenAddr == nil {
@@ -380,7 +382,7 @@ func (g *BootstrapCommand) wireguardSetup(ms *meshservice.MeshService, wgListenA
 // serfSetup initializes the serf cluster from parameters
 func (g *BootstrapCommand) serfSetup(ms *meshservice.MeshService, pk string, wgListenAddr net.IP) (err error) {
 	// create and start the serf cluster
-	ms.NewSerfCluster()
+	ms.NewSerfCluster(g.serfModeLAN)
 
 	err = ms.StartSerfCluster(true, pk, wgListenAddr.String(), g.wgListenPort, ms.MeshIP.IP.String())
 	if err != nil {

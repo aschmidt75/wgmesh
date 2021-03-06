@@ -54,6 +54,12 @@ message JoinRequest {
 
     // name of mesh to join
     string meshName = 4;
+
+    // optional name of node
+    string nodeName = 5;
+
+    // NAT mode
+    bool nat = 6;
 }
 
 message JoinResponse {
@@ -75,6 +81,9 @@ message JoinResponse {
 
     // encryption key for serf gossip protocol
     string serfEncryptionKey = 6;
+
+    // use serf LAN configuration (true) or WAN configuration (false)
+    bool serfModeLAN = 7;
 }
 
 message LeaveRequest {

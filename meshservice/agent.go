@@ -212,7 +212,7 @@ func (as *MeshAgentServer) RTT(cte *AgentEmpty, rttServer Agent_RTTServer) error
 	rttRequestBuf, _ := proto.Marshal(&RTTRequest{
 		RequestedBy: as.ms.NodeName,
 	})
-	as.ms.s.UserEvent("rtt0", []byte(rttRequestBuf), true)
+	as.ms.s.UserEvent(serfEventMarkerRTTReq, []byte(rttRequestBuf), true)
 
 	// wait until all are collected and streamed out
 	time.Sleep(time.Duration(as.ms.s.NumNodes()+2) * time.Second)
