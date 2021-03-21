@@ -5,6 +5,7 @@ go 1.15
 replace github.com/aschmidt75/wgmesh/cmd => ./cmd
 
 require (
+	github.com/GeertJohan/go.rice v1.0.2
 	github.com/armon/go-metrics v0.3.6 // indirect
 	github.com/aschmidt75/go-wg-wrapper v0.1.1-0.20210206151906-a540c071fbf8
 	github.com/golang/protobuf v1.4.3

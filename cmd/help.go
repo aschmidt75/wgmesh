@@ -13,5 +13,6 @@ func DisplayHelp(vi VersionInfo) {
 	fmt.Println("  info         Print out information about the mesh and its nodes")
 	fmt.Println("  tags         Set or remove tags on nodes")
 	fmt.Println("  rtt          Query RTTs for all nodes")
+	fmt.Println("  ui           Starts the web user interface")
 	fmt.Println()
 }
