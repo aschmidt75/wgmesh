@@ -32,7 +32,7 @@ $ make release
 
 * Linux
 * Wireguard module installed/enabled in kernel
-* Works best with a non-NATed setup. It can work with NAT, but there's no guarantee.
+* Works best with a non-NATed setup. It may work with a NAT, but there's no guarantee.
 
 ## Usage
 

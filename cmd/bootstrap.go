@@ -25,6 +25,7 @@ type BootstrapCommand struct {
 	meshName               string
 	nodeName               string
 	cidrRange              string
+	cidrRangeIPAM          string
 	ip                     string
 	wgListenAddr           string
 	wgListenPort           int
@@ -50,6 +51,7 @@ func NewBootstrapCommand() *BootstrapCommand {
 		meshName:               envStrWithDefault("WGMESH_MESH_NAME", ""),
 		nodeName:               envStrWithDefault("WGMESH_NODE_NAME", ""),
 		cidrRange:              envStrWithDefault("WGMESH_CIDR_RANGE", "10.232.0.0/16"),
+		cidrRangeIPAM:          envStrWithDefault("WGMESH_CIDR_RANGE_IPAM", ""),
 		ip:                     envStrWithDefault("WGMESH_MESH_IP", "10.232.1.1"),
 		wgListenAddr:           envStrWithDefault("WGMESH_WIREGUARD_LISTEN_ADDR", ""),
 		wgListenPort:           envIntWithDefault("WGMESH_WIREGUARD_LISTEN_PORT", 54540),
@@ -71,6 +73,7 @@ func NewBootstrapCommand() *BootstrapCommand {
 	c.fs.StringVar(&c.meshName, "n", c.meshName, "name of the mesh network (short).\nenv:WGMESH_MESH_NAME")
 	c.fs.StringVar(&c.nodeName, "node-name", c.nodeName, "(optional) name of this node.\nenv:WGMESH_NODE_NAME")
 	c.fs.StringVar(&c.cidrRange, "cidr", c.cidrRange, "CIDR range of this mesh (internal ips).\nenv:WGMESH_CIDR_RANGE")
+	c.fs.StringVar(&c.cidrRangeIPAM, "cidr-ipam", c.cidrRangeIPAM, "CIDR (sub)range where this bootstrap mode may allocate ips from. Must be within -cidr range.\nenv:WGMESH_CIDR_RANGE_IPAM")
 	c.fs.StringVar(&c.ip, "ip", c.ip, "internal ip of the bootstrap node. Must be set fixed for bootstrap nodes.\nenv:WGMESH_MESH_IP")
 	c.fs.StringVar(&c.wgListenAddr, "listen-addr", c.wgListenAddr, "external wireguard ip.\nenv:WGMESH_WIREGUARD_LISTEN_ADDR")
 	c.fs.IntVar(&c.wgListenPort, "listen-port", c.wgListenPort, "set the (external) wireguard listen port.\nenv:WGMESH_WIREGUARD_LISTEN_PORT")
@@ -262,6 +265,18 @@ func (g *BootstrapCommand) Run() error {
 	}
 	ms.CIDRRange = *cidrRangeIpnet
 
+	if g.cidrRangeIPAM != "" {
+		_, cidrRangeIPAMIpnet, err := net.ParseCIDR(g.cidrRangeIPAM)
+		if err != nil {
+			return err
+		}
+
+		// TODO check if this is within cidr range above..
+
+		ms.CIDRRangeIPAM = cidrRangeIPAMIpnet
+
+	}
+
 	// MeshIP ist composed of what user specifies using -ip, but
 	// with the net mask of -cidr. e.g. 10.232.0.0/16 with an
 	// IP of 10.232.5.99 becomes 10.232.5.99/16
@@ -321,7 +336,7 @@ func (g *BootstrapCommand) Run() error {
 		fmt.Printf("** To have another node join this mesh, use this command:\n")
 		ba := ms.GrpcBindAddr
 		if ba == "0.0.0.0" {
-			ba = "<PUBLIC_IP_OF_THIS_NODE>"
+			ba = "<IP_OF_THIS_NODE>"
 		}
 		fmt.Printf("** wgmesh join -v -dev -n %s -bootstrap-addr %s:%d\n", g.meshName, ba, ms.GrpcBindPort)
 		fmt.Printf("** \n")

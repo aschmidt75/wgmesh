@@ -31,6 +31,7 @@ This command is for bootstrap nodes only.
 
 * `ip` (default 10.232.1.1 for bootstrap nodes, not used for joining nodes) private IP of this node. This needs to be specified for the bootstrap nodes. wgmesh will take this ip address on the wireguard interface for itself.
 * `cidr` (default 10.232.0.0/16) This is the private network in CIDR notation. All nodes joining the mesh will be assigned an IP address within this address space.
+* `cidr-ipam` (no default) This is the subnet within -cidr, in CIDR notation. It makes this bootstrap node assign new IP addresses from this subnet range only. This way, a mesh may be split into several, per-bootstrap-node-managed sub-entities.
 * `grpc-bind-addr` (default 0.0.0.0 only applies for bootstrap nodes) Bind address for the public gRPC service of bootstrap nodes
 * `grpc-bind-port`(default 5000 only for bootstrap nodes) TCP port number for the public gRPC service
 * `grpc-server-key` points to the PEM-encoded private key. This is used for the external gRPC service.

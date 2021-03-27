@@ -20,7 +20,7 @@ const _ = grpc.SupportPackageIsVersion7
 type MeshClient interface {
 	// Joining node starts to shake hands and receives a token and
 	// additional authorization requirements
-	ShakeHands(ctx context.Context, in *HandshakeRequest, opts ...grpc.CallOption) (*HandshakeResponse, error)
+	Begin(ctx context.Context, in *HandshakeRequest, opts ...grpc.CallOption) (*HandshakeResponse, error)
 	// BeginJoin begins the join process by sending a JoinRequest
 	// and receiving a JoinResponse with setup details
 	Join(ctx context.Context, in *JoinRequest, opts ...grpc.CallOption) (*JoinResponse, error)
@@ -36,9 +36,9 @@ func NewMeshClient(cc grpc.ClientConnInterface) MeshClient {
 	return &meshClient{cc}
 }
 
-func (c *meshClient) ShakeHands(ctx context.Context, in *HandshakeRequest, opts ...grpc.CallOption) (*HandshakeResponse, error) {
+func (c *meshClient) Begin(ctx context.Context, in *HandshakeRequest, opts ...grpc.CallOption) (*HandshakeResponse, error) {
 	out := new(HandshakeResponse)
-	err := c.cc.Invoke(ctx, "/meshservice.Mesh/ShakeHands", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/meshservice.Mesh/Begin", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ func (x *meshPeersClient) Recv() (*Peer, error) {
 type MeshServer interface {
 	// Joining node starts to shake hands and receives a token and
 	// additional authorization requirements
-	ShakeHands(context.Context, *HandshakeRequest) (*HandshakeResponse, error)
+	Begin(context.Context, *HandshakeRequest) (*HandshakeResponse, error)
 	// BeginJoin begins the join process by sending a JoinRequest
 	// and receiving a JoinResponse with setup details
 	Join(context.Context, *JoinRequest) (*JoinResponse, error)
@@ -105,8 +105,8 @@ type MeshServer interface {
 type UnimplementedMeshServer struct {
 }
 
-func (UnimplementedMeshServer) ShakeHands(context.Context, *HandshakeRequest) (*HandshakeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ShakeHands not implemented")
+func (UnimplementedMeshServer) Begin(context.Context, *HandshakeRequest) (*HandshakeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Begin not implemented")
 }
 func (UnimplementedMeshServer) Join(context.Context, *JoinRequest) (*JoinResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Join not implemented")
@@ -127,20 +127,20 @@ func RegisterMeshServer(s grpc.ServiceRegistrar, srv MeshServer) {
 	s.RegisterService(&Mesh_ServiceDesc, srv)
 }
 
-func _Mesh_ShakeHands_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Mesh_Begin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(HandshakeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MeshServer).ShakeHands(ctx, in)
+		return srv.(MeshServer).Begin(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/meshservice.Mesh/ShakeHands",
+		FullMethod: "/meshservice.Mesh/Begin",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MeshServer).ShakeHands(ctx, req.(*HandshakeRequest))
+		return srv.(MeshServer).Begin(ctx, req.(*HandshakeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -192,8 +192,8 @@ var Mesh_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*MeshServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "ShakeHands",
-			Handler:    _Mesh_ShakeHands_Handler,
+			MethodName: "Begin",
+			Handler:    _Mesh_Begin_Handler,
 		},
 		{
 			MethodName: "Join",

@@ -24,6 +24,10 @@ type MeshService struct {
 	// IP address within this range
 	CIDRRange net.IPNet
 
+	// If set, this bootstrap will assign IP addresses from
+	// this range only.
+	CIDRRangeIPAM *net.IPNet
+
 	// Local mesh IP of this node
 	MeshIP net.IPNet
 

@@ -3,22 +3,139 @@ package meshservice
 import (
 	context "context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"net"
 	"strconv"
+	"strings"
+	"time"
 
 	wgwrapper "github.com/aschmidt75/go-wg-wrapper/pkg/wgwrapper"
+	"github.com/cristalhq/jwt/v3"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
+
+// Begin starts the join process with a handshake
+func (ms *MeshService) Begin(ctx context.Context, req *HandshakeRequest) (*HandshakeResponse, error) {
+	log.WithField("req", req).Trace("Got begin request")
+
+	if req.MeshName != ms.MeshName {
+		return &HandshakeResponse{
+			Result:       HandshakeResponse_ERROR,
+			ErrorMessage: "Unknown mesh",
+		}, nil
+	}
+
+	key := []byte(`secret`)
+	signer, err := jwt.NewSignerHS(jwt.HS256, key)
+	if err != nil {
+		log.Error(err)
+		return &HandshakeResponse{
+			Result:       HandshakeResponse_ERROR,
+			ErrorMessage: "Internal error",
+		}, nil
+	}
+
+	now := time.Now()
+	id := uuid.New()
+
+	claims := &jwt.RegisteredClaims{
+		Audience:  []string{"wgmesh"},
+		Issuer:    fmt.Sprintf("%s-%s-%s", "wgmesh", ms.MeshName, ms.NodeName),
+		ID:        id.String(),
+		IssuedAt:  jwt.NewNumericDate(now),
+		NotBefore: jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(10 * time.Second)), // TODO make configruable
+	}
+
+	builder := jwt.NewBuilder(signer)
+	token, err := builder.Build(claims)
+	if err != nil {
+		log.Error(err)
+		return &HandshakeResponse{
+			Result:       HandshakeResponse_ERROR,
+			ErrorMessage: "Internal error",
+		}, nil
+	}
+
+	return &HandshakeResponse{
+		Result:    HandshakeResponse_OK,
+		JoinToken: token.String(),
+	}, nil
+}
+
+func (ms *MeshService) parseJWT(md metadata.MD) error {
+	log.WithField("md", md).Trace("parseJWT")
+	if t, ok := md["authorization"]; ok {
+		for _, value := range t {
+			if strings.HasPrefix(value, "Bearer: ") {
+				arr := strings.Split(value, " ")
+				if len(arr) > 1 {
+					tokenStr := arr[1]
+
+					key := []byte(`secret`)
+					verifier, err := jwt.NewVerifierHS(jwt.HS256, key)
+					if err != nil {
+						return err
+					}
+					token, err := jwt.ParseAndVerifyString(tokenStr, verifier)
+					if err != nil {
+						log.WithError(err).Error("Unable to parse/verify join token")
+						return err
+					}
+					var claims jwt.StandardClaims
+					err = json.Unmarshal(token.RawClaims(), &claims)
+					if err != nil {
+						log.WithError(err).Error("Unable to parse/verify join token claims")
+						return err
+					}
+
+					// check claims
+					if !claims.IsForAudience("wgmesh") ||
+						!claims.IsValidAt(time.Now()) {
+
+						return errors.New("token claims not valid, aborting join")
+					}
+
+					log.WithField("claims", claims).Debug("Verified handshake token claims")
+
+					return nil
+				}
+			}
+		}
+	}
+
+	return errors.New("authorization header not found or not valid")
+}
 
 // Join allows other nodes to join by sending a JoinRequest
 func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinResponse, error) {
 
 	log.WithField("req", req).Trace("Got join request")
+
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return &JoinResponse{
+			Result:            JoinResponse_ERROR,
+			ErrorMessage:      "internal error while processing authorization",
+			JoiningNodeMeshIP: "",
+		}, nil
+	}
+	if err := ms.parseJWT(md); err != nil {
+		log.Error(err)
+		return &JoinResponse{
+			Result:            JoinResponse_ERROR,
+			ErrorMessage:      "error in authorization",
+			JoiningNodeMeshIP: "",
+		}, nil
+	}
 
 	if req.MeshName != ms.MeshName {
 		return &JoinResponse{
@@ -29,10 +146,16 @@ func (ms *MeshService) Join(ctx context.Context, req *JoinRequest) (*JoinRespons
 	}
 
 	// choose a random ip address from the address pool of this node
-	// which has not been used before
+	// which has not been used before. Choose from cidr range or
+	// if specified from the IPAM cidr range
 	var mip net.IP
 	for {
-		mip, _ = newIPInNet(ms.CIDRRange)
+		var _net *net.IPNet = &ms.CIDRRange
+		if ms.CIDRRangeIPAM != nil {
+			_net = ms.CIDRRangeIPAM
+		}
+
+		mip, _ = newIPInNet(*_net)
 
 		if ms.isIPAvailable(mip) {
 			break

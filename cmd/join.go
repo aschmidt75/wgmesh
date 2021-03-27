@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -18,9 +19,11 @@ import (
 
 	wgwrapper "github.com/aschmidt75/go-wg-wrapper/pkg/wgwrapper"
 	meshservice "github.com/aschmidt75/wgmesh/meshservice"
+	"github.com/cristalhq/jwt/v3"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 )
 
 // JoinCommand struct
@@ -264,7 +267,15 @@ func (g *JoinCommand) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	joinResponse, err := service.Join(ctx, &meshservice.JoinRequest{
+	token, err := g.handleHandshake(ctx, service, &ms)
+	if err != nil {
+		return err
+	}
+	md := metadata.Pairs("authorization", fmt.Sprintf("Bearer: %s", token))
+
+	mdCtx := metadata.NewOutgoingContext(ctx, md)
+
+	joinResponse, err := service.Join(mdCtx, &meshservice.JoinRequest{
 		Pubkey:       ms.WireguardPubKey,
 		EndpointIP:   listenIP.String(),
 		EndpointPort: int32(g.listenPort),
@@ -421,6 +432,50 @@ func (g *JoinCommand) Run() error {
 	}
 
 	return nil
+}
+
+func (g *JoinCommand) handleHandshake(ctx context.Context, service meshservice.MeshClient, ms *meshservice.MeshService) (tokenStr string, err error) {
+	handshakeResponse, err := service.Begin(ctx, &meshservice.HandshakeRequest{
+		MeshName: g.meshName,
+	})
+	if err != nil {
+		log.WithError(err).Error("unable to begin handshake")
+	}
+	log.WithField("hr", handshakeResponse).Trace("got handshakeResponse")
+	if handshakeResponse.Result != meshservice.HandshakeResponse_OK {
+		msg := "bootstrap node returned handshake error"
+		log.WithField("msg", handshakeResponse.ErrorMessage).Error(msg)
+		return "", errors.New(msg)
+	}
+
+	// extract token
+	key := []byte(`secret`)
+	verifier, err := jwt.NewVerifierHS(jwt.HS256, key)
+	if err != nil {
+		return "", err
+	}
+	token, err := jwt.ParseAndVerifyString(handshakeResponse.JoinToken, verifier)
+	if err != nil {
+		log.WithError(err).Error("Unable to parse/verify join token")
+		return "", err
+	}
+	var claims jwt.StandardClaims
+	err = json.Unmarshal(token.RawClaims(), &claims)
+	if err != nil {
+		log.WithError(err).Error("Unable to parse/verify join token claims")
+		return "", err
+	}
+
+	// check claims
+	if !claims.IsForAudience("wgmesh") ||
+		!claims.IsValidAt(time.Now()) {
+
+		return "", errors.New("token claims not valid, aborting join")
+	}
+
+	log.WithField("claims", claims).Debug("Verified handshake token claims")
+
+	return token.String(), nil
 }
 
 // grpcSetup starts the local agent

@@ -7,7 +7,7 @@ option go_package = "github.com/aschmidt75/wgmesh/meshservice";
 service Mesh {
     // Joining node starts to shake hands and receives a token and
     // additional authorization requirements
-    rpc ShakeHands(HandshakeRequest) returns (HandshakeResponse) {}
+    rpc Begin(HandshakeRequest) returns (HandshakeResponse) {}
 
     // BeginJoin begins the join process by sending a JoinRequest
     // and receiving a JoinResponse with setup details
@@ -37,8 +37,9 @@ message HandshakeResponse {
     // token which joining node has to reuse when using Join/Peers methods
     string joinToken = 3;
 
-    // additional authorization requirements which joining nodes have to fulfil
-    map<string,string> authzReqs = 4;
+    // additional authentication/authorization requirements which joining nodes have to fulfil
+    // Reserved for future use
+    map<string,string> authReqs = 4;
 }
 
 
