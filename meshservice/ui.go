@@ -79,6 +79,7 @@ func (u *UIServer) apiNodesHandler(w http.ResponseWriter, req *http.Request) {
 		Name   string            `json:"name"`
 		MeshIP string            `json:"meshIP"`
 		Tags   map[string]string `json:"tags"`
+		Rtt    int32             `json:"rtt"`
 	}
 
 	type uiNodes struct {
@@ -94,6 +95,7 @@ func (u *UIServer) apiNodesHandler(w http.ResponseWriter, req *http.Request) {
 			Name:   member.NodeName,
 			MeshIP: member.Addr,
 			Tags:   make(map[string]string),
+			Rtt:    member.RttMsec,
 		}
 		for _, tag := range member.Tags {
 			m := nodes.Nodes[idx].Tags
@@ -101,13 +103,14 @@ func (u *UIServer) apiNodesHandler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	w.Header().Add("Content-Type", "application/json")
+
 	bytes, err := json.Marshal(nodes)
 	if err != nil {
 		log.WithError(err).Error("Unable to marshal nodelist as json")
 		fmt.Fprintf(w, "[]")
 	}
 
-	w.Header().Add("Content-Type", "application/json")
 	w.Header().Add("Content-Length", fmt.Sprintf("%d", len(bytes)))
 	w.Write(bytes)
 }
