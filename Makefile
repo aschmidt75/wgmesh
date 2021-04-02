@@ -33,7 +33,7 @@ webappend:
 	( cd meshservice && rice append --exec ../dist/${BINARY_NAME} )
 
 .PHONY: release
-release: gen webappend
+release: 
 	goreleaser --snapshot --rm-dist
 
 .PHONY: clean
