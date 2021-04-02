@@ -5,9 +5,11 @@ Automatically build private wireguard mesh networks.
 [![Go Report Card](https://goreportcard.com/badge/github.com/aschmidt75/wgmesh)](https://goreportcard.com/report/github.com/aschmidt75/wgmesh)
 [![Go](https://github.com/aschmidt75/wgmesh/actions/workflows/go.yml/badge.svg)](https://github.com/aschmidt75/wgmesh/actions/workflows/go.yml)
 
+![wgmesh Dashboard](docs/wgmesh-ui-sample.png)
+
 ## How it works
 
-* A mesh consist of interconnected nodes. Each node has a [wireguard](https://www.wireguard.com/) interface with all other nodes registered as peers. The mesh is thus fully-connected through the wireguard-based overlay network. Each node can IP-reach all other nodes via direct host routes.
+* A mesh consist of interconnected nodes. Each node has a [wireguard](https://www.wireguard.com/) interface with all other nodes registered as peers. The mesh is fully-connected through the wireguard-based overlay network. Each node can IP-reach all other nodes via direct host routes.
 * At least one of the mesh nodes is a bootstrap node. Besides the wireguard peerings it runs a gRPC-based mesh endpoint, where other nodes can issue join requests.
 * New nodes can enter the mesh by joining via a bootstrap node. The bootstrap node learns about the joining node and its wireguard endpoint and public key. It distributes this information to the other mesh nodes. It also fowards a list of mesh peers to the new joining node so it is able to configure its own wireguard interface.
 * Existing mesh nodes learn about the new joining node from the bootstrap node and update their wireguard peer configuration accordingly.
@@ -16,10 +18,17 @@ Automatically build private wireguard mesh networks.
 
 ## Build
 
-The default targets of `Makefile` generate protobuf and grpc parts and build the binary in `dist/`
+The default targets of `Makefile` generate protobuf and grpc parts and build the binary in `dist/`. It also builds the web ui (and needs node/npm for this), and
+appends the web artifacts using [go.rice](https://github.com/GeertJohan/go.rice).
 
 ```bash
-$ make
+$ make all
+```
+
+The binary can be built without web ui support:
+
+```bash
+$ make clean gen build
 ```
 
 Additionally, goreleaser can be used to create a snapshot release for different platforms (also in `dist/`)
@@ -28,11 +37,18 @@ Additionally, goreleaser can be used to create a snapshot release for different 
 $ make release
 ```
 
+So for a full, releaseable build one needs
+* go (tested w/ version go1.15.5 darwin/amd64)
+* [rice](https://github.com/GeertJohan/go.rice)
+* node (tested w/ v14.16.0)
+* npm (tested w/ 6.14.11)
+* [goreleaser](https://github.com/goreleaser/goreleaser) (tested w/ version 0.155.0)
+
 ## Prerequisites
 
 * Linux
 * Wireguard module installed/enabled in kernel
-* Works best with a non-NATed setup. It may work with a NAT, but there's no guarantee.
+* Works best with a non-NATed setup. It can partially work with NAT, but there's no guarantee.
 
 ## Usage
 
@@ -106,7 +122,13 @@ xoJbYw07PMAE8B8DB |10.232.184.219 |alive  |7   | _addr=, _port=54540,  |
 xoJbYw07PMAE80101 |10.232.1.1     |alive  |38  | _addr=, _port=54540, |
 ```
 
+The `ui` command start an HTTP server, serving a simple, vue-based dashboard. By default it binds
+to port 9095 on the localhost interface only. It does not authenticate clients and does not (yet) support TLS.
 
+```bash
+# wgmesh ui 
+Serving files on 127.0.0.1:9095, press ctrl-C to exit
+```
 
 ## License
 

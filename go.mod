@@ -5,6 +5,7 @@ go 1.15
 replace github.com/aschmidt75/wgmesh/cmd => ./cmd
 
 require (
+	github.com/GeertJohan/go.rice v1.0.2
 	github.com/armon/go-metrics v0.3.6 // indirect
 	github.com/aschmidt75/go-wg-wrapper v0.1.1-0.20210206151906-a540c071fbf8
 	github.com/cristalhq/jwt/v3 v3.0.12
@@ -24,7 +25,7 @@ require (
 	go.opencensus.io v0.22.6
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
-	golang.org/x/net v0.0.0-20210119194325-5f4716e94777 // indirect
+	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
 	golang.org/x/text v0.3.5 // indirect
 	golang.org/x/tools v0.1.0 // indirect
