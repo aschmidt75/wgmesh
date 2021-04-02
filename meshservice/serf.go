@@ -121,7 +121,7 @@ func (ms *MeshService) StartStatsUpdater() {
 	ticker2 := time.NewTicker(60 * time.Second)
 	done := make(chan bool)
 
-	var last *statsContent = nil
+	var last *statsContent
 
 	// The first update dumps the node count only when it changes
 	go func() {

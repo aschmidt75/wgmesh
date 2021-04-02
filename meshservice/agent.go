@@ -132,7 +132,7 @@ func (as *MeshAgentServer) Nodes(cte *AgentEmpty, agentNodesServer Agent_NodesSe
 	}
 
 	for _, member := range as.meshService().Serf().Members() {
-		var rtt int32 = 0
+		var rtt int32
 		memberCoord, ok := as.meshService().Serf().GetCachedCoordinate(member.Name)
 		if ok && memberCoord != nil {
 			d := memberCoord.DistanceTo(myCoord)
