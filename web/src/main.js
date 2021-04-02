@@ -31,7 +31,6 @@ new Vue({
         r = "/"+r;
       }
       const res = routes[r] || NotFound;
-      console.log(res)
       return res
     }
   },

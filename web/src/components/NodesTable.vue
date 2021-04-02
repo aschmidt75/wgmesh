@@ -8,7 +8,11 @@
           </h3>
           <b-collapse id="collapse-mesh-info" class="mt-8">
           <b-card>
-            <p class="card-text">Mesh info</p>
+            <p class="card-text">
+              Mesh Name: <b>{{ meshInfo.name }}</b><br />
+              {{ meshInfo.nodeCount }} active nodes<br />
+              This Node: <b>{{ meshInfo.thisNodeName }}</b><br />
+            </p>
           </b-card>
           </b-collapse>
           
@@ -53,7 +57,6 @@
             >
               <template #cell(name)="data">
                 <span v-html="data.value"></span>
-                <b v:if="{{ 1 == 2 }}">This node</b>
               </template>
               <template #cell(tags)="data">
                 <span v-html="data.value"></span>
@@ -90,6 +93,7 @@ export default {
           filter: null,
           filterOn: [],
           nodeNameOfSelf: "-none-",
+          meshInfo: {},
           fields: [
             { 
               key: "name", 
@@ -99,15 +103,15 @@ export default {
               filterByFormatted: true,
               formatter: (name) => {
                 let str = name;
+                console.log("", name, " / ", this.nodeNameOfSelf);
                 if (name === this.nodeNameOfSelf) {
-                  str += "<b-icon-bug></b-icon-bug>"
+                  str = "<b>"+name+"</b>";
                 }
-                // find out if this is 
                 return str
               }
             },
             { key: "meshIP", label: 'IP Address', sortable: true },
-            { key: "rtt", label: 'RTT [msec]', sortable: true },
+            { key: "rttMsec", label: 'RTT [msec]', sortable: true },
             { 
               key: "tags", 
               label: 'Tags', 
@@ -120,7 +124,10 @@ export default {
                     continue;
                   }
                   str += "<tr>"
-                  const v = tag[k]
+                  let v = tag[k]
+                  if (v.length >= 16) {
+                    v = v.substring(0,15)+"..."
+                  }
                   str +=  util.format("<td>%s</td><td>%s</td>", k, v);
                   str += "</tr>"
                 }
@@ -134,7 +141,18 @@ export default {
   },
   mounted() {
     this.getFromAPI();
-    this.getMock();
+    //this.getMock();
+
+    let url = "ws://"+window.location.host+"/api/updates";
+
+    const updateFunction = this.getFromAPI;
+
+    var ws = new WebSocket(url);
+    ws.onmessage = function() {
+      //console.log(e);
+      updateFunction();
+    };
+
   },
   methods: {
     refresh() {
@@ -149,11 +167,23 @@ export default {
     getMock() {
       this.nodeNameOfSelf = "m1";
       this.items = [
-            { "name": "m1", "meshIP": "10.0.0.1", "rtt": 20, "tags": { "_srv": "none", "_ip": "1.2.3.4", "type": "app" } },
-            { "name": "m2", "meshIP": "10.0.12.34", isSelf: true,"rtt": 128, "tags": { "_srv": "none", "type": "nginx" } }
+            { "name": "m1", "meshIP": "10.0.0.1", "rttMsec": 20, "tags": { "_srv": "none", "_ip": "1.2.3.4", "type": "app" } },
+            { "name": "m2", "meshIP": "10.0.12.34", isSelf: true,"rttMsec": 128, "tags": { "_srv": "none", "type": "nginx" } }
       ]
     },
     getFromAPI() {
+      axios
+        .get("/api/mesh")
+        .then(response => {
+          if(response !== undefined && response.data !== undefined) {
+            this.meshInfo = response.data;
+            this.nodeNameOfSelf = this.meshInfo.thisNodeName || "-none-";
+          }
+        })
+        .catch(err => {
+          console.log(err);
+        });
+
       axios
         .get("/api/nodes")
         .then(response => {
@@ -163,13 +193,15 @@ export default {
                 return {
                   "name": elem.name,
                   "meshIP": elem.meshIP,
-                  "tags": elem.tags
+                  "tags": elem.tags,
+                  "rttMsec": elem.rttMsec,
                 }
               }),
               toArray()
             );
             mappedData.subscribe(res => {
-              this.items = res
+              this.items = res;
+              //console.log(res);
             })
 
           }

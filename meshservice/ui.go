@@ -11,22 +11,26 @@ import (
 
 	rice "github.com/GeertJohan/go.rice"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/net/websocket"
 	grpc "google.golang.org/grpc"
 )
 
 // UIServer  ...
 type UIServer struct {
 	agentGrpcSocket string
+	httpBindAddr    string
+	httpBindPort    int
 	conf            rice.Config
 	box             *rice.Box
 
-	meshInfo *MeshInfo
-	members  []*MemberInfo
-	m        sync.Mutex
+	meshInfo    *MeshInfo
+	members     []*MemberInfo
+	m           sync.Mutex
+	lastUpdated time.Time
 }
 
 // NewUIServer ...
-func NewUIServer(agentGrpcSocket string) *UIServer {
+func NewUIServer(agentGrpcSocket string, httpBindAddr string, httpBindPort int) *UIServer {
 	conf := rice.Config{
 		LocateOrder: []rice.LocateMethod{rice.LocateAppended, rice.LocateFS},
 	}
@@ -39,10 +43,13 @@ func NewUIServer(agentGrpcSocket string) *UIServer {
 
 	return &UIServer{
 		agentGrpcSocket: agentGrpcSocket,
+		httpBindAddr:    httpBindAddr,
+		httpBindPort:    httpBindPort,
 		box:             box,
 		conf:            conf,
 		meshInfo:        &MeshInfo{},
 		members:         make([]*MemberInfo, 0),
+		lastUpdated:     time.Now(),
 	}
 }
 
@@ -51,10 +58,14 @@ func (u *UIServer) Serve() {
 
 	http.Handle("/", http.FileServer(u.box.HTTPBox()))
 	http.HandleFunc("/api/nodes", u.apiNodesHandler)
+	http.HandleFunc("/api/mesh", u.apiMeshHandler)
+	http.Handle("/api/updates", websocket.Handler(u.updater))
 
-	fmt.Println("Serving files on :8080, press ctrl-C to exit")
+	listenSpec := fmt.Sprintf("%s:%d", u.httpBindAddr, u.httpBindPort)
+
+	fmt.Printf("Serving files on %s, press ctrl-C to exit", listenSpec)
 	go func() {
-		err := http.ListenAndServe(":8080", nil)
+		err := http.ListenAndServe(listenSpec, nil)
 		if err != nil {
 			log.WithError(err).Fatalf("error serving files")
 		}
@@ -71,15 +82,54 @@ func (u *UIServer) Serve() {
 
 }
 
+// simple websocket updater
+func (u *UIServer) updater(conn *websocket.Conn) {
+	lastUpdated := time.Now()
+	for {
+
+		l := func(u *UIServer) time.Time {
+			u.m.Lock()
+			defer u.m.Unlock()
+
+			return u.lastUpdated
+		}(u)
+
+		if l.After(lastUpdated) {
+
+			type wsUpdateStruct struct {
+				Aspect string `json:"a"`
+				Ts     string `json:"ts"`
+			}
+			upd := wsUpdateStruct{
+				Aspect: "nodes",
+				Ts:     l.Format(time.UnixDate),
+			}
+			updJSON, err := json.Marshal(upd)
+			if err == nil {
+				_, err := conn.Write(updJSON)
+				if err != nil {
+					log.WithError(err).Error("Error sending ws update")
+					return
+				}
+			}
+
+			lastUpdated = l
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// returns all nodes
 func (u *UIServer) apiNodesHandler(w http.ResponseWriter, req *http.Request) {
 	u.m.Lock()
 	defer u.m.Unlock()
 
 	type uiNodeInfo struct {
-		Name   string            `json:"name"`
-		MeshIP string            `json:"meshIP"`
-		Tags   map[string]string `json:"tags"`
-		Rtt    int32             `json:"rtt"`
+		Name    string            `json:"name"`
+		MeshIP  string            `json:"meshIP"`
+		Tags    map[string]string `json:"tags"`
+		RttMsec int32             `json:"rttMsec"`
+		IsSelf  bool              `json:"isSelf"`
 	}
 
 	type uiNodes struct {
@@ -92,10 +142,11 @@ func (u *UIServer) apiNodesHandler(w http.ResponseWriter, req *http.Request) {
 	for idx, member := range u.members {
 		log.WithField("m", member).Trace(".")
 		nodes.Nodes[idx] = uiNodeInfo{
-			Name:   member.NodeName,
-			MeshIP: member.Addr,
-			Tags:   make(map[string]string),
-			Rtt:    member.RttMsec,
+			Name:    member.NodeName,
+			MeshIP:  member.Addr,
+			Tags:    make(map[string]string),
+			RttMsec: member.RttMsec,
+			IsSelf:  false,
 		}
 		for _, tag := range member.Tags {
 			m := nodes.Nodes[idx].Tags
@@ -115,6 +166,42 @@ func (u *UIServer) apiNodesHandler(w http.ResponseWriter, req *http.Request) {
 	w.Write(bytes)
 }
 
+// returns mesh info
+func (u *UIServer) apiMeshHandler(w http.ResponseWriter, req *http.Request) {
+	u.m.Lock()
+	defer u.m.Unlock()
+
+	if u.meshInfo == nil {
+		w.Header().Add("Content-Type", "application/json")
+		w.Header().Add("Content-Length", fmt.Sprintf("%d", 0))
+		return
+	}
+
+	type uiMeshInfo struct {
+		Name      string `json:"name"`
+		NodeName  string `json:"thisNodeName"`
+		NodeCount int    `json:"nodeCount"`
+	}
+
+	meshInfo := uiMeshInfo{
+		Name:      u.meshInfo.Name,
+		NodeName:  u.meshInfo.NodeName,
+		NodeCount: int(u.meshInfo.NodeCount),
+	}
+
+	w.Header().Add("Content-Type", "application/json")
+
+	bytes, err := json.Marshal(meshInfo)
+	if err != nil {
+		log.WithError(err).Error("Unable to marshal mesh info as json")
+		fmt.Fprintf(w, "[]")
+	}
+
+	w.Header().Add("Content-Length", fmt.Sprintf("%d", len(bytes)))
+	w.Write(bytes)
+}
+
+// watches for changes in mesh via agent grpc socket
 func (u *UIServer) agentUpdater() error {
 	endpoint := fmt.Sprintf("unix://%s", u.agentGrpcSocket)
 
@@ -177,7 +264,6 @@ func (u *UIServer) singleCycle(ctx context.Context, agent AgentClient) error {
 		log.WithError(err).Error("Unable to query infos from agent")
 		return err
 	}
-	log.WithField("meshInfo", meshInfo).Trace("query")
 	u.meshInfo = meshInfo
 
 	r, err := agent.Nodes(ctx, &AgentEmpty{})
@@ -196,6 +282,8 @@ func (u *UIServer) singleCycle(ctx context.Context, agent AgentClient) error {
 		idx = idx + 1
 	}
 	log.WithField("u.members", u.members).Trace("query")
+
+	u.lastUpdated = time.Now()
 
 	return nil
 }
