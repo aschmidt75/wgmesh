@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	config "github.com/aschmidt75/wgmesh/config"
 	meshservice "github.com/aschmidt75/wgmesh/meshservice"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -17,20 +18,25 @@ import (
 type RTTCommand struct {
 	CommandDefaults
 
-	fs              *flag.FlagSet
-	agentGrpcSocket string
+	fs *flag.FlagSet
+
+	// configuration file
+	config string
+	// configuration struct
+	meshConfig config.Config
 }
 
 // NewRTTCommand creates the Tag Command
 func NewRTTCommand() *RTTCommand {
 	c := &RTTCommand{
 		CommandDefaults: NewCommandDefaults(),
+		config:          envStrWithDefault("WGMESH_CONFIG", ""),
+		meshConfig:      config.NewDefaultConfig(),
 		fs:              flag.NewFlagSet("rtt", flag.ContinueOnError),
-		agentGrpcSocket: "/var/run/wgmesh.sock",
 	}
 
-	c.fs.StringVar(&c.agentGrpcSocket, "agent-grpc-socket", c.agentGrpcSocket, "agent socket to dial")
-
+	c.fs.StringVar(&c.config, "config", c.config, "file name of config file (optional).\nenv:WGMESH_cONFIG")
+	c.fs.StringVar(&c.meshConfig.Agent.GRPCSocket, "agent-grpc-socket", c.meshConfig.Agent.GRPCSocket, "agent socket to dial")
 	c.DefaultFields(c.fs)
 
 	return c
@@ -49,6 +55,15 @@ func (g *RTTCommand) Init(args []string) error {
 	}
 	g.ProcessDefaults()
 
+	// load config file if we have one
+	if g.config != "" {
+		g.meshConfig, err = config.NewConfigFromFile(g.config)
+		if err != nil {
+			log.WithError(err).Error("Config read error")
+			return fmt.Errorf("Unable to read configuration from %s", g.config)
+		}
+	}
+
 	return nil
 }
 
@@ -59,7 +74,7 @@ func (g *RTTCommand) Run() error {
 	)
 
 	//
-	endpoint := fmt.Sprintf("unix://%s", g.agentGrpcSocket)
+	endpoint := fmt.Sprintf("unix://%s", g.meshConfig.Agent.GRPCSocket)
 
 	conn, err := grpc.Dial(endpoint, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {

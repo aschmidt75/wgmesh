@@ -9,6 +9,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	config "github.com/aschmidt75/wgmesh/config"
 	meshservice "github.com/aschmidt75/wgmesh/meshservice"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -18,21 +19,29 @@ import (
 type InfoCommand struct {
 	CommandDefaults
 
-	fs              *flag.FlagSet
-	agentGrpcSocket string
-	watchFlag       bool
+	fs *flag.FlagSet
+
+	// configuration file
+	config string
+	// configuration struct
+	meshConfig config.Config
+
+	// options not in config, only from parameters
+	watchFlag bool
 }
 
 // NewInfoCommand creates the Info Command structure and sets the parameters
 func NewInfoCommand() *InfoCommand {
 	c := &InfoCommand{
 		CommandDefaults: NewCommandDefaults(),
+		config:          envStrWithDefault("WGMESH_CONFIG", ""),
+		meshConfig:      config.NewDefaultConfig(),
 		fs:              flag.NewFlagSet("info", flag.ContinueOnError),
-		agentGrpcSocket: "/var/run/wgmesh.sock",
 		watchFlag:       false,
 	}
 
-	c.fs.StringVar(&c.agentGrpcSocket, "agent-grpc-socket", c.agentGrpcSocket, "agent socket to dial")
+	c.fs.StringVar(&c.config, "config", c.config, "file name of config file (optional).\nenv:WGMESH_cONFIG")
+	c.fs.StringVar(&c.meshConfig.Agent.GRPCSocket, "agent-grpc-socket", c.meshConfig.Agent.GRPCSocket, "agent socket to dial")
 	c.fs.BoolVar(&c.watchFlag, "watch", c.watchFlag, "watch for changes until interrupted")
 
 	c.DefaultFields(c.fs)
@@ -53,6 +62,15 @@ func (g *InfoCommand) Init(args []string) error {
 	}
 	g.ProcessDefaults()
 
+	// load config file if we have one
+	if g.config != "" {
+		g.meshConfig, err = config.NewConfigFromFile(g.config)
+		if err != nil {
+			log.WithError(err).Error("Config read error")
+			return fmt.Errorf("Unable to read configuration from %s", g.config)
+		}
+	}
+
 	return nil
 }
 
@@ -63,7 +81,7 @@ func (g *InfoCommand) Run() error {
 	)
 
 	//
-	endpoint := fmt.Sprintf("unix://%s", g.agentGrpcSocket)
+	endpoint := fmt.Sprintf("unix://%s", g.meshConfig.Agent.GRPCSocket)
 
 	conn, err := grpc.Dial(endpoint, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {

@@ -63,7 +63,7 @@ func (u *UIServer) Serve() {
 
 	listenSpec := fmt.Sprintf("%s:%d", u.httpBindAddr, u.httpBindPort)
 
-	fmt.Printf("Serving files on %s, press ctrl-C to exit", listenSpec)
+	fmt.Printf("Serving files on %s, press ctrl-C to exit\n", listenSpec)
 	go func() {
 		err := http.ListenAndServe(listenSpec, nil)
 		if err != nil {
@@ -97,8 +97,10 @@ func (u *UIServer) updater(conn *websocket.Conn) {
 		if l.After(lastUpdated) {
 
 			type wsUpdateStruct struct {
+				// Aspect decribes what has changes
 				Aspect string `json:"a"`
-				Ts     string `json:"ts"`
+				// Ts is the timestamp
+				Ts string `json:"ts"`
 			}
 			upd := wsUpdateStruct{
 				Aspect: "nodes",

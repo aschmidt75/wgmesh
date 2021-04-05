@@ -88,7 +88,7 @@ func (g *BootstrapCommand) Init(args []string) error {
 	if g.config != "" {
 		g.meshConfig, err = config.NewConfigFromFile(g.config)
 		if err != nil {
-			log.WithError(err).Trace("Config read error")
+			log.WithError(err).Error("Config read error")
 			return fmt.Errorf("Unable to read configuration from %s", g.config)
 		}
 
@@ -252,8 +252,8 @@ func (g *BootstrapCommand) Run() error {
 		if wgListenAddr == nil {
 			return errors.New("need -listen-addr")
 		}
-
 	}
+	// TODO make sure wgListenAddr matches one of the local interfaces addresses
 
 	_, cidrRangeIpnet, err := net.ParseCIDR(cfg.Bootstrap.MeshCIDRRange)
 	if err != nil {

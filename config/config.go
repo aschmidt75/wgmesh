@@ -24,6 +24,9 @@ type Config struct {
 
 	// Agent contains optional agent configuration
 	Agent *AgentConfig `yaml:"agent,omitempty"`
+
+	// UI contains web user interface configuration
+	UI *UIConfig `yaml:"ui,omitempty"`
 }
 
 // BootstrapConfig contains condfiguration parts for bootstrap mode
@@ -62,7 +65,7 @@ type BootstrapConfig struct {
 	SerfModeLAN bool `yaml:"serf-mode-lan"`
 }
 
-// BootstrapGRPCTLSConfig ...
+// BootstrapGRPCTLSConfig contains settings necessary for configuration TLS for the bootstrap node
 type BootstrapGRPCTLSConfig struct {
 	// GRPCServerKey points to PEM-encoded private key to be used by grpc server.
 	GRPCServerKey string `yaml:"grpc-server-key"`
@@ -77,7 +80,7 @@ type BootstrapGRPCTLSConfig struct {
 	GRPCCaPath string `yaml:"grpc-ca-path"`
 }
 
-// WireguardConfig containns wireguard-related settings
+// WireguardConfig contains wireguard-related settings
 type WireguardConfig struct {
 	// ListenAddr is the ip address where wireguard should listen for packets
 	ListenAddr string `yaml:"listen-addr"`
@@ -86,13 +89,22 @@ type WireguardConfig struct {
 	ListenPort int `yaml:"listen-port"`
 }
 
-// Config contains settings for the gRPC-based local agent
+// AgentConfig contains settings for the gRPC-based local agent
 type AgentConfig struct {
 	// GRPCBindSocket is the local socket file to bind grpc agent to.
 	GRPCBindSocket string `yaml:"agent-grpc-bind-socket"`
 
 	// GRPCBindSocketIDs of the form <uid:gid> to change bind socket to.
 	GRPCBindSocketIDs string `yaml:"agent-grpc-bind-socket-id"`
+
+	// GRPCSocket is the local socket file, used by agent clients.
+	GRPCSocket string `yaml:"agent-grpc-socket"`
+}
+
+// UIConfig contains config entries for the web user interface
+type UIConfig struct {
+	HTTPBindAddr string `yaml:"http-bind-addr"`
+	HTTPBindPort int    `yaml:"http-bind-port"`
 }
 
 // NewConfigFromFile reads yaml config file from given path
@@ -139,6 +151,11 @@ func NewDefaultConfig() Config {
 		Agent: &AgentConfig{
 			GRPCBindSocket:    envStrWithDefault("WGMESH_AGENT_BIND_SOCKET", "/var/run/wgmesh.sock"),
 			GRPCBindSocketIDs: envStrWithDefault("WGMESH_AGENT_BIND_SOCKET_ID", ""),
+			GRPCSocket:        envStrWithDefault("WGMESH_AGENT_SOCKET", "/var/run/wgmesh.sock"),
+		},
+		UI: &UIConfig{
+			HTTPBindAddr: envStrWithDefault("WGMESH_HTTP_BIND_ADDR", "127.0.0.1"),
+			HTTPBindPort: envIntWithDefault("WGMESH_HTTP_BIND_PORT", 9095),
 		},
 	}
 }

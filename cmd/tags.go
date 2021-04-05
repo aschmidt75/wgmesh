@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	config "github.com/aschmidt75/wgmesh/config"
 	meshservice "github.com/aschmidt75/wgmesh/meshservice"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -18,25 +19,33 @@ import (
 type TagsCommand struct {
 	CommandDefaults
 
-	fs              *flag.FlagSet
-	tagStr          string
-	deleteFlag      string
-	agentGrpcSocket string
+	fs *flag.FlagSet
+
+	// configuration file
+	config string
+	// configuration struct
+	meshConfig config.Config
+
+	// options not in config, only from parameters
+	tagStr     string
+	deleteFlag string
 }
 
 // NewTagsCommand creates the Tag Command
 func NewTagsCommand() *TagsCommand {
 	c := &TagsCommand{
 		CommandDefaults: NewCommandDefaults(),
+		config:          envStrWithDefault("WGMESH_CONFIG", ""),
+		meshConfig:      config.NewDefaultConfig(),
 		fs:              flag.NewFlagSet("tags", flag.ContinueOnError),
 		tagStr:          "",
 		deleteFlag:      "",
-		agentGrpcSocket: "/var/run/wgmesh.sock",
 	}
 
+	c.fs.StringVar(&c.config, "config", c.config, "file name of config file (optional).\nenv:WGMESH_cONFIG")
 	c.fs.StringVar(&c.tagStr, "set", c.tagStr, "set tag key=value")
 	c.fs.StringVar(&c.deleteFlag, "delete", c.deleteFlag, "to delete a key")
-	c.fs.StringVar(&c.agentGrpcSocket, "agent-grpc-socket", c.agentGrpcSocket, "agent socket to dial")
+	c.fs.StringVar(&c.meshConfig.Agent.GRPCSocket, "agent-grpc-socket", c.meshConfig.Agent.GRPCSocket, "agent socket to dial")
 
 	c.DefaultFields(c.fs)
 
@@ -55,6 +64,29 @@ func (g *TagsCommand) Init(args []string) error {
 		return err
 	}
 	g.ProcessDefaults()
+
+	// load config file if we have one
+	if g.config != "" {
+		g.meshConfig, err = config.NewConfigFromFile(g.config)
+		if err != nil {
+			log.WithError(err).Error("Config read error")
+			return fmt.Errorf("Unable to read configuration from %s", g.config)
+		}
+	}
+
+	// load config file if we have one
+	if g.config != "" {
+		g.meshConfig, err = config.NewConfigFromFile(g.config)
+		if err != nil {
+			log.WithError(err).Trace("Config read error")
+			return fmt.Errorf("Unable to read configuration from %s", g.config)
+		}
+
+		log.WithField("cfg", g.meshConfig).Trace("Read")
+		log.WithField("cfg.bootstrap", g.meshConfig.Bootstrap).Trace("Read")
+		log.WithField("cfg.wireguard", g.meshConfig.Wireguard).Trace("Read")
+		log.WithField("cfg.agent", g.meshConfig.Agent).Trace("Read")
+	}
 
 	if g.tagStr != "" {
 		arr := strings.Split(g.tagStr, "=")
@@ -77,7 +109,7 @@ func (g *TagsCommand) Run() error {
 	)
 
 	//
-	endpoint := fmt.Sprintf("unix://%s", g.agentGrpcSocket)
+	endpoint := fmt.Sprintf("unix://%s", g.meshConfig.Agent.GRPCSocket)
 
 	conn, err := grpc.Dial(endpoint, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {

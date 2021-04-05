@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"flag"
+	"fmt"
 
+	config "github.com/aschmidt75/wgmesh/config"
 	meshservice "github.com/aschmidt75/wgmesh/meshservice"
 	log "github.com/sirupsen/logrus"
 )
@@ -11,10 +13,14 @@ import (
 type UICommand struct {
 	CommandDefaults
 
-	fs              *flag.FlagSet
-	agentGrpcSocket string
-	httpBindAddr    string
-	httpBindPort    int
+	fs *flag.FlagSet
+
+	// configuration file
+	config string
+	// configuration struct
+	meshConfig config.Config
+
+	// options not in config, only from parameters
 }
 
 // NewUICommand creates the UI Command structure and sets the parameters
@@ -22,14 +28,14 @@ func NewUICommand() *UICommand {
 	c := &UICommand{
 		CommandDefaults: NewCommandDefaults(),
 		fs:              flag.NewFlagSet("ui", flag.ContinueOnError),
-		agentGrpcSocket: "/var/run/wgmesh.sock",
-		httpBindAddr:    envStrWithDefault("WGMESH_HTTP_BIND_ADDR", "127.0.0.1"),
-		httpBindPort:    envIntWithDefault("WGMESH_HTTP_BIND_PORT", 9095),
+		config:          envStrWithDefault("WGMESH_CONFIG", ""),
+		meshConfig:      config.NewDefaultConfig(),
 	}
 
-	c.fs.StringVar(&c.agentGrpcSocket, "agent-grpc-socket", c.agentGrpcSocket, "agent socket to dial")
-	c.fs.StringVar(&c.httpBindAddr, "http-bind-addr", c.httpBindAddr, "HTTP bind address")
-	c.fs.IntVar(&c.httpBindPort, "http-bind-port", c.httpBindPort, "HTTP bind port")
+	c.fs.StringVar(&c.config, "config", c.config, "file name of config file (optional).\nenv:WGMESH_cONFIG")
+	c.fs.StringVar(&c.meshConfig.Agent.GRPCSocket, "agent-grpc-socket", c.meshConfig.Agent.GRPCSocket, "agent socket to dial")
+	c.fs.StringVar(&c.meshConfig.UI.HTTPBindAddr, "http-bind-addr", c.meshConfig.UI.HTTPBindAddr, "HTTP bind address")
+	c.fs.IntVar(&c.meshConfig.UI.HTTPBindPort, "http-bind-port", c.meshConfig.UI.HTTPBindPort, "HTTP bind port")
 
 	c.DefaultFields(c.fs)
 
@@ -49,6 +55,15 @@ func (g *UICommand) Init(args []string) error {
 	}
 	g.ProcessDefaults()
 
+	// load config file if we have one
+	if g.config != "" {
+		g.meshConfig, err = config.NewConfigFromFile(g.config)
+		if err != nil {
+			log.WithError(err).Error("Config read error")
+			return fmt.Errorf("Unable to read configuration from %s", g.config)
+		}
+	}
+
 	return nil
 }
 
@@ -58,7 +73,10 @@ func (g *UICommand) Run() error {
 		"Running cli command",
 	)
 
-	uiServer := meshservice.NewUIServer(g.agentGrpcSocket, g.httpBindAddr, g.httpBindPort)
+	uiServer := meshservice.NewUIServer(
+		g.meshConfig.Agent.GRPCSocket,
+		g.meshConfig.UI.HTTPBindAddr,
+		g.meshConfig.UI.HTTPBindPort)
 	uiServer.Serve()
 
 	return nil
