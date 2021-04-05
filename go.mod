@@ -34,5 +34,6 @@ require (
 	google.golang.org/grpc v1.35.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0 // indirect
 	google.golang.org/protobuf v1.25.0
+	gopkg.in/yaml.v2 v2.2.5
 	gortc.io/stun v1.23.0
 )

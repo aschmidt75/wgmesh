@@ -20,3 +20,4 @@ dist/
 
 node_modules/
 BACKLOG.md
+wgmesh.conf.yaml
