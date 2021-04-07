@@ -60,7 +60,7 @@ func NewBootstrapCommand() *BootstrapCommand {
 	c.fs.StringVar(&c.meshConfig.Bootstrap.GRPCTLSConfig.GRPCServerCert, "grpc-server-cert", c.meshConfig.Bootstrap.GRPCTLSConfig.GRPCServerCert, "points to PEM-encoded certificate be used by grpc server.\nenv:WGMESH_SERVER_CERT")
 	c.fs.StringVar(&c.meshConfig.Bootstrap.GRPCTLSConfig.GRPCCaCert, "grpc-ca-cert", c.meshConfig.Bootstrap.GRPCTLSConfig.GRPCCaCert, "points to PEM-encoded CA certificate.\nenv:WGMESH_CA_CERT")
 	c.fs.StringVar(&c.meshConfig.Bootstrap.GRPCTLSConfig.GRPCCaPath, "grpc-ca-path", c.meshConfig.Bootstrap.GRPCTLSConfig.GRPCCaPath, "points to a directory containing PEM-encoded CA certificates.\nenv:WGMESH_CA_PATH")
-	c.fs.StringVar(&c.meshConfig.Bootstrap.MemberlistFile, "memberlist-file", c.meshConfig.Bootstrap.MemberlistFile, "optional name of file for a log of all current mesh members.\nenv:WGMESH_MEMBERLIST_FILE")
+	c.fs.StringVar(&c.meshConfig.MemberlistFile, "memberlist-file", c.meshConfig.MemberlistFile, "optional name of file for a log of all current mesh members.\nenv:WGMESH_MEMBERLIST_FILE")
 	c.fs.StringVar(&c.meshConfig.Bootstrap.MeshEncryptionKey, "mesh-encryption-key", c.meshConfig.Bootstrap.MeshEncryptionKey, "optional key for symmetric encryption of internal mesh traffic. Must be 32 Bytes base64-ed.\nenv:WGMESH_ENCRYPTION_KEY")
 	c.fs.BoolVar(&c.devMode, "dev", c.devMode, "Enables development mode which runs without encryption, authentication and without TLS")
 	c.fs.BoolVar(&c.meshConfig.Bootstrap.SerfModeLAN, "serf-mode-lan", c.meshConfig.Bootstrap.SerfModeLAN, "Activates LAN mode or cluster communication. Default is false (=WAN mode).\nenv:WGMESH_SERF_MODE_LAN")
@@ -86,17 +86,22 @@ func (g *BootstrapCommand) Init(args []string) error {
 
 	// load config file if we have one
 	if g.config != "" {
-		g.meshConfig, err = config.NewConfigFromFile(g.config)
+		err = g.meshConfig.LoadConfigFromFile(g.config)
 		if err != nil {
 			log.WithError(err).Error("Config read error")
 			return fmt.Errorf("Unable to read configuration from %s", g.config)
 		}
-
-		log.WithField("cfg", g.meshConfig).Trace("Read")
-		log.WithField("cfg.bootstrap", g.meshConfig.Bootstrap).Trace("Read")
-		log.WithField("cfg.wireguard", g.meshConfig.Wireguard).Trace("Read")
-		log.WithField("cfg.agent", g.meshConfig.Agent).Trace("Read")
 	}
+
+	err = g.fs.Parse(args)
+	if err != nil {
+		return err
+	}
+
+	log.WithField("cfg", g.meshConfig).Trace("Read")
+	log.WithField("cfg.bootstrap", g.meshConfig.Bootstrap).Trace("Read")
+	log.WithField("cfg.wireguard", g.meshConfig.Wireguard).Trace("Read")
+	log.WithField("cfg.agent", g.meshConfig.Agent).Trace("Read")
 
 	// validate given parameters/config
 
@@ -225,7 +230,7 @@ func (g *BootstrapCommand) Run() error {
 	log.WithField("ms", ms).Trace(
 		"created",
 	)
-	ms.SetMemberlistExportFile(cfg.Bootstrap.MemberlistFile)
+	ms.SetMemberlistExportFile(cfg.MemberlistFile)
 
 	// Set serf encryption key when given and we're not in dev mode
 	if !g.devMode && cfg.Bootstrap.MeshEncryptionKey != "" {
@@ -322,8 +327,8 @@ func (g *BootstrapCommand) Run() error {
 	fmt.Printf("** gRPC Service listener endpoint:  %s:%d\n", ms.GrpcBindAddr, ms.GrpcBindPort)
 	fmt.Printf("** This node's name:                %s\n", ms.NodeName)
 	fmt.Printf("** This node's mesh IP:             %s\n", ms.MeshIP.IP.String())
-	if cfg.Bootstrap.MemberlistFile != "" {
-		fmt.Printf("** Mesh node details export to:     %s\n", cfg.Bootstrap.MemberlistFile)
+	if cfg.MemberlistFile != "" {
+		fmt.Printf("** Mesh node details export to:     %s\n", cfg.MemberlistFile)
 	}
 	fmt.Printf("** \n")
 	if g.devMode {
@@ -487,7 +492,7 @@ func (g *BootstrapCommand) cleanUp(ms *meshservice.MeshService) error {
 	ms.StopGrpcService()
 
 	// delete memberlist-file
-	os.Remove(cfg.Bootstrap.MemberlistFile)
+	os.Remove(cfg.MemberlistFile)
 
 	// Wireguard will be removed by deferred func
 

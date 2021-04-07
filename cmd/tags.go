@@ -67,26 +67,19 @@ func (g *TagsCommand) Init(args []string) error {
 
 	// load config file if we have one
 	if g.config != "" {
-		g.meshConfig, err = config.NewConfigFromFile(g.config)
+		err = g.meshConfig.LoadConfigFromFile(g.config)
 		if err != nil {
 			log.WithError(err).Error("Config read error")
 			return fmt.Errorf("Unable to read configuration from %s", g.config)
 		}
 	}
 
-	// load config file if we have one
-	if g.config != "" {
-		g.meshConfig, err = config.NewConfigFromFile(g.config)
-		if err != nil {
-			log.WithError(err).Trace("Config read error")
-			return fmt.Errorf("Unable to read configuration from %s", g.config)
-		}
-
-		log.WithField("cfg", g.meshConfig).Trace("Read")
-		log.WithField("cfg.bootstrap", g.meshConfig.Bootstrap).Trace("Read")
-		log.WithField("cfg.wireguard", g.meshConfig.Wireguard).Trace("Read")
-		log.WithField("cfg.agent", g.meshConfig.Agent).Trace("Read")
+	err = g.fs.Parse(args)
+	if err != nil {
+		return err
 	}
+	log.WithField("cfg", g.meshConfig).Trace("Read")
+	log.WithField("cfg.agent", g.meshConfig.Agent).Trace("Read")
 
 	if g.tagStr != "" {
 		arr := strings.Split(g.tagStr, "=")

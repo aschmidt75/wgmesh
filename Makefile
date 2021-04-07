@@ -4,7 +4,7 @@ BINARY_NAME = wgmesh
 NOW = `date +"%Y-%m-%d_%H-%M-%S"`
 MAIN_GO_PATH=wgmesh.go
 
-all: clean gen lint build web webappend
+all: clean lint build web webappend
 
 .PHONY: build
 build: gen

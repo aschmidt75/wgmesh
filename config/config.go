@@ -1,10 +1,11 @@
 package config
 
 import (
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
 	"strconv"
+
+	"gopkg.in/yaml.v2"
 )
 
 // Config is the main Configuration struct
@@ -19,6 +20,9 @@ type Config struct {
 	// Bootstrap is the config part for bootstrap mode
 	Bootstrap *BootstrapConfig `yaml:"bootstrap,omitempty"`
 
+	// Join is the config part for join mode
+	Join *JoinConfig `yaml:"join,omitempty"`
+
 	// Wireguard is the configuration part for wireguard-related settings
 	Wireguard *WireguardConfig `yaml:"wireguard,omitempty"`
 
@@ -27,6 +31,10 @@ type Config struct {
 
 	// UI contains web user interface configuration
 	UI *UIConfig `yaml:"ui,omitempty"`
+
+	// MemberlistFile is an optional setting. If set, node information is written
+	// here periodically
+	MemberlistFile string `yaml:"memberlist-file"`
 }
 
 // BootstrapConfig contains condfiguration parts for bootstrap mode
@@ -53,16 +61,27 @@ type BootstrapConfig struct {
 	// GRPCTLSConfig is the optional TLS settings struct for the gRPC interface
 	GRPCTLSConfig *BootstrapGRPCTLSConfig `yaml:"grpc-tls,omitempty"`
 
-	// MemberlistFile is an optional setting. If set, node information is written
-	// here periodically
-	MemberlistFile string `yaml:"memberlist-file"`
-
 	// MeshEncryptionKey is an optional key for symmetric encryption of internal mesh traffic.
 	// Must be 32 Bytes base64-ed.
 	MeshEncryptionKey string `yaml:"mesh-encryption-key"`
 
 	// SerfModeLAN activates LAN mode or cluster communication. Default is false (=WAN mode).
 	SerfModeLAN bool `yaml:"serf-mode-lan"`
+}
+
+// JoinConfig contains condfiguration parts for join mode
+type JoinConfig struct {
+	// BootstrapEndpoint is the IP:Port of remote mesh bootstrap node.
+	BootstrapEndpoint string `yaml:"bootstrap-endpoint"`
+
+	// ClientKey points to PEM-encoded private key to be used by the joining client when dialing the bootstrap node.
+	ClientKey string `yaml:"client-key"`
+
+	// ClientCert points to PEM-encoded certificate be used by the joining client when dialing the bootstrap node.
+	ClientCert string `yaml:"client-cert"`
+
+	// ClientCaCert points to PEM-encoded CA certificate.
+	ClientCaCert string `yaml:"ca-cert"`
 }
 
 // BootstrapGRPCTLSConfig contains settings necessary for configuration TLS for the bootstrap node
@@ -107,19 +126,18 @@ type UIConfig struct {
 	HTTPBindPort int    `yaml:"http-bind-port"`
 }
 
-// NewConfigFromFile reads yaml config file from given path
-func NewConfigFromFile(path string) (Config, error) {
+// LoadConfigFromFile reads yaml config file from given path
+func (cfg *Config) LoadConfigFromFile(path string) error {
 	b, err := ioutil.ReadFile(path)
 	if err != nil {
-		return Config{}, err
+		return err
 	}
 
-	c := NewDefaultConfig()
-	if err = yaml.Unmarshal(b, &c); err != nil {
-		return c, err
+	if err = yaml.Unmarshal(b, cfg); err != nil {
+		return err
 	}
 
-	return c, nil
+	return nil
 }
 
 // NewDefaultConfig creates a default configuration with valid presets.
@@ -140,9 +158,14 @@ func NewDefaultConfig() Config {
 				GRPCCaCert:     envStrWithDefault("WGMESH_CA_CERT", ""),
 				GRPCCaPath:     envStrWithDefault("WGMESH_CA_PATH", ""),
 			},
-			MemberlistFile:    envStrWithDefault("WGMESH_MEMBERLIST_FILE", ""),
 			MeshEncryptionKey: envStrWithDefault("WGMESH_ENCRYPTION_KEY", ""),
 			SerfModeLAN:       envBoolWithDefault("WGMESH_SERF_MODE_LAN", false),
+		},
+		Join: &JoinConfig{
+			BootstrapEndpoint: envStrWithDefault("WGMESH_BOOTSTRAP_ADDR", ""),
+			ClientKey:         envStrWithDefault("WGMESH_CLIENT_KEY", ""),
+			ClientCert:        envStrWithDefault("WGMESH_CLIENT_CERT", ""),
+			ClientCaCert:      envStrWithDefault("WGMESH_CA_CERT", ""),
 		},
 		Wireguard: &WireguardConfig{
 			ListenAddr: envStrWithDefault("WGMESH_WIREGUARD_LISTEN_ADDR", ""),
@@ -157,6 +180,7 @@ func NewDefaultConfig() Config {
 			HTTPBindAddr: envStrWithDefault("WGMESH_HTTP_BIND_ADDR", "127.0.0.1"),
 			HTTPBindPort: envIntWithDefault("WGMESH_HTTP_BIND_PORT", 9095),
 		},
+		MemberlistFile: envStrWithDefault("WGMESH_MEMBERLIST_FILE", ""),
 	}
 }
 

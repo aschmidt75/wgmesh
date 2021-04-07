@@ -57,12 +57,19 @@ func (g *RTTCommand) Init(args []string) error {
 
 	// load config file if we have one
 	if g.config != "" {
-		g.meshConfig, err = config.NewConfigFromFile(g.config)
+		err = g.meshConfig.LoadConfigFromFile(g.config)
 		if err != nil {
 			log.WithError(err).Error("Config read error")
 			return fmt.Errorf("Unable to read configuration from %s", g.config)
 		}
 	}
+
+	err = g.fs.Parse(args)
+	if err != nil {
+		return err
+	}
+	log.WithField("cfg", g.meshConfig).Trace("Read")
+	log.WithField("cfg.agent", g.meshConfig.Agent).Trace("Read")
 
 	return nil
 }
