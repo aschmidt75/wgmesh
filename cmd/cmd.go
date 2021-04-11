@@ -42,8 +42,8 @@ func ProcessCommands(args []string, vi VersionInfo) error {
 
 	subcommand := os.Args[1]
 	if subcommand == "version" {
-		fmt.Printf("wgmesh %s (%s) - %s", vi.Version, vi.Commit, vi.Date)
-		fmt.Printf("(C) 2021 @aschmidt75\n")
+		fmt.Printf("wgmesh %s (%s) - %s\n", vi.Version, vi.Commit, vi.Date)
+		fmt.Printf("(C) 2021 @aschmidt75 Apache License, Version 2.0\n")
 		os.Exit(0)
 	}
 

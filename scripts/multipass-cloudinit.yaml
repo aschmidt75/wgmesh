@@ -1,6 +1,7 @@
 bootcmd:
     - apt-get update -y -q && apt-get install -y -q wireguard-tools
     - systemctl stop snapd multipathd unattended-upgrades
-    - wget https://github.com/aschmidt75/wgmesh/releases/download/v0.1.1/wgmesh_0.1.1_Linux_x86_64.tar.gz
-    - tar -xzf wgmesh_0.1.1_Linux_x86_64.tar.gz && chmod +x wgmesh && cp wgmesh /usr/local/bin && wgmesh version
-    
+    - wget https://github.com/aschmidt75/wgmesh/releases/download/v0.1.2/wgmesh_0.1.2_Linux_x86_64.tar.gz
+    - tar -xzf wgmesh_0.1.2_Linux_x86_64.tar.gz && chmod +x wgmesh && mv wgmesh /usr/local/bin && wgmesh version
+    - curl https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 -o /usr/bin/cfssl && chmod +x /usr/bin/cfssl && /usr/bin/cfssl version
+    - curl https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64 -o /usr/bin/cfssljson && chmod +x /usr/bin/cfssljson

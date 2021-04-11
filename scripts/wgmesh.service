@@ -1,0 +1,19 @@
+[Unit]
+Description=wgmesh bootstrap
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=root
+#ExecStartPre=/sbin/ip link show wgm1 >/dev/null 2>&1 && /sbin/ip link del dev wgm1
+ExecStart=/usr/local/bin/wgmesh bootstrap -n m1 -v \
+    -grpc-ca-cert /root/wgmesh-tls/ca.pem \
+    -grpc-server-cert /root/wgmesh-tls/bootstrap.pem \
+    -grpc-server-key /root/wgmesh-tls/bootstrap-key.pem
+
+[Install]
+WantedBy=multi-user.target
+

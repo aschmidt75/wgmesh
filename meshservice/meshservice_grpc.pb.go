@@ -21,8 +21,8 @@ type MeshClient interface {
 	// Joining node starts to shake hands and receives a token and
 	// additional authorization requirements
 	Begin(ctx context.Context, in *HandshakeRequest, opts ...grpc.CallOption) (*HandshakeResponse, error)
-	// BeginJoin begins the join process by sending a JoinRequest
-	// and receiving a JoinResponse with setup details
+	// Join start the join process by sending a JoinRequest
+	// and receiving a JoinResponse with setup details.
 	Join(ctx context.Context, in *JoinRequest, opts ...grpc.CallOption) (*JoinResponse, error)
 	// Peers returns a stream of all peers currently connected to the mesh
 	Peers(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Mesh_PeersClient, error)
@@ -93,8 +93,8 @@ type MeshServer interface {
 	// Joining node starts to shake hands and receives a token and
 	// additional authorization requirements
 	Begin(context.Context, *HandshakeRequest) (*HandshakeResponse, error)
-	// BeginJoin begins the join process by sending a JoinRequest
-	// and receiving a JoinResponse with setup details
+	// Join start the join process by sending a JoinRequest
+	// and receiving a JoinResponse with setup details.
 	Join(context.Context, *JoinRequest) (*JoinResponse, error)
 	// Peers returns a stream of all peers currently connected to the mesh
 	Peers(*Empty, Mesh_PeersServer) error

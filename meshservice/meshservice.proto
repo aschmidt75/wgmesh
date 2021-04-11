@@ -9,8 +9,8 @@ service Mesh {
     // additional authorization requirements
     rpc Begin(HandshakeRequest) returns (HandshakeResponse) {}
 
-    // BeginJoin begins the join process by sending a JoinRequest
-    // and receiving a JoinResponse with setup details
+    // Join start the join process by sending a JoinRequest
+    // and receiving a JoinResponse with setup details.
     rpc Join(JoinRequest) returns (JoinResponse) {}
 
     // Peers returns a stream of all peers currently connected to the mesh
@@ -21,11 +21,15 @@ message Empty {
 
 }
 
+// HandshakeRequest includes details about which mesh to join
 message HandshakeRequest {
     // name of mesh to join
     string meshName = 1;
 }
 
+// HandshakeResponse indicates if joining the desired mesh is
+// acceptable and may include authenication/authorization
+// requirements which joining nodes have to fulfil.
 message HandshakeResponse {
     enum Result {
         OK = 0;
@@ -42,7 +46,9 @@ message HandshakeResponse {
     map<string,string> authReqs = 4;
 }
 
-
+// JoinRequest is sent by a joining node when their wireguard interface
+// is set up and is ready to join. It includes wireguard details such as
+// the public key etc, and an optional node name.
 message JoinRequest {
     // wireguard: public key of joining node
     string pubkey = 1;
@@ -58,11 +64,11 @@ message JoinRequest {
 
     // optional name of node
     string nodeName = 5;
-
-    // NAT mode
-    bool nat = 6;
 }
 
+// JoinResponse indicates if joinrequest has been accepted. If so,
+// it includes an IP address for the joining node to assign to its
+// wireguard interface, and additional data to fully join the mesh.
 message JoinResponse {
     enum Result {
         OK = 0;
@@ -85,19 +91,6 @@ message JoinResponse {
 
     // use serf LAN configuration (true) or WAN configuration (false)
     bool serfModeLAN = 7;
-}
-
-message LeaveRequest {
-    string pubkey = 1;
-}
-
-message LeaveResponse {
-    enum Result {
-        OK = 0;
-        ERROR = 1;
-    }
-    Result result = 1;
-    string errorMessage = 2;
 }
 
 // mesh-internal message formats via serf user events

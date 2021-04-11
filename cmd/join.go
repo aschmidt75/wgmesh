@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -267,16 +266,35 @@ func (g *JoinCommand) Run() error {
 	service := meshservice.NewMeshClient(conn)
 	log.WithField("service", service).Trace("got grpc service")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // TODO make configurable
 	defer cancel()
 
-	token, err := g.handleHandshake(ctx, service, &ms)
+	token, authResponses, err := g.handleHandshake(ctx, service, &ms)
 	if err != nil {
 		return err
 	}
-	md := metadata.Pairs("authorization", fmt.Sprintf("Bearer: %s", token))
+	// build a jwt containing the auth responses, signing it with received token
+	signer, err := jwt.NewSignerHS(jwt.HS256, []byte(token))
+	if err != nil {
+		return err
+	}
 
-	mdCtx := metadata.NewOutgoingContext(ctx, md)
+	now := time.Now()
+
+	claims := &jwt.RegisteredClaims{
+		IssuedAt:  jwt.NewNumericDate(now),
+		NotBefore: jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(10 * time.Second)),
+		Subject:   strings.Join(authResponses, "::"),
+	}
+
+	builder := jwt.NewBuilder(signer)
+	jwt, err := builder.Build(claims)
+	if err != nil {
+		return err
+	}
+
+	mdCtx := metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", fmt.Sprintf("Bearer: %s", jwt)))
 
 	joinResponse, err := service.Join(mdCtx, &meshservice.JoinRequest{
 		Pubkey:       ms.WireguardPubKey,
@@ -416,7 +434,9 @@ func (g *JoinCommand) Run() error {
 	return nil
 }
 
-func (g *JoinCommand) handleHandshake(ctx context.Context, service meshservice.MeshClient, ms *meshservice.MeshService) (tokenStr string, err error) {
+func (g *JoinCommand) handleHandshake(ctx context.Context, service meshservice.MeshClient, ms *meshservice.MeshService) (tokenStr string, authResponses []string, err error) {
+
+	// call Begin method of boostrap's grpc service
 	handshakeResponse, err := service.Begin(ctx, &meshservice.HandshakeRequest{
 		MeshName: g.meshConfig.MeshName,
 	})
@@ -427,37 +447,13 @@ func (g *JoinCommand) handleHandshake(ctx context.Context, service meshservice.M
 	if handshakeResponse.Result != meshservice.HandshakeResponse_OK {
 		msg := "bootstrap node returned handshake error"
 		log.WithField("msg", handshakeResponse.ErrorMessage).Error(msg)
-		return "", errors.New(msg)
+		return "", []string{}, errors.New(msg)
 	}
 
-	// extract token
-	key := []byte(`secret`)
-	verifier, err := jwt.NewVerifierHS(jwt.HS256, key)
-	if err != nil {
-		return "", err
-	}
-	token, err := jwt.ParseAndVerifyString(handshakeResponse.JoinToken, verifier)
-	if err != nil {
-		log.WithError(err).Error("Unable to parse/verify join token")
-		return "", err
-	}
-	var claims jwt.StandardClaims
-	err = json.Unmarshal(token.RawClaims(), &claims)
-	if err != nil {
-		log.WithError(err).Error("Unable to parse/verify join token claims")
-		return "", err
-	}
+	// TODO process authn/authz requests ...
+	authResps := []string{}
 
-	// check claims
-	if !claims.IsForAudience("wgmesh") ||
-		!claims.IsValidAt(time.Now()) {
-
-		return "", errors.New("token claims not valid, aborting join")
-	}
-
-	log.WithField("claims", claims).Debug("Verified handshake token claims")
-
-	return token.String(), nil
+	return handshakeResponse.JoinToken, authResps, nil
 }
 
 // grpcSetup starts the local agent

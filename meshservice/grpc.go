@@ -5,16 +5,13 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math/rand"
 	"net"
 	"strconv"
 	"strings"
-	"time"
 
 	wgwrapper "github.com/aschmidt75/go-wg-wrapper/pkg/wgwrapper"
 	"github.com/cristalhq/jwt/v3"
-	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -33,41 +30,9 @@ func (ms *MeshService) Begin(ctx context.Context, req *HandshakeRequest) (*Hands
 		}, nil
 	}
 
-	key := []byte(`secret`)
-	signer, err := jwt.NewSignerHS(jwt.HS256, key)
-	if err != nil {
-		log.Error(err)
-		return &HandshakeResponse{
-			Result:       HandshakeResponse_ERROR,
-			ErrorMessage: "Internal error",
-		}, nil
-	}
-
-	now := time.Now()
-	id := uuid.New()
-
-	claims := &jwt.RegisteredClaims{
-		Audience:  []string{"wgmesh"},
-		Issuer:    fmt.Sprintf("%s-%s-%s", "wgmesh", ms.MeshName, ms.NodeName),
-		ID:        id.String(),
-		IssuedAt:  jwt.NewNumericDate(now),
-		NotBefore: jwt.NewNumericDate(now),
-		ExpiresAt: jwt.NewNumericDate(now.Add(10 * time.Second)), // TODO make configruable
-	}
-
-	builder := jwt.NewBuilder(signer)
-	token, err := builder.Build(claims)
-	if err != nil {
-		log.Error(err)
-		return &HandshakeResponse{
-			Result:       HandshakeResponse_ERROR,
-			ErrorMessage: "Internal error",
-		}, nil
-	}
-
 	return &HandshakeResponse{
 		Result:    HandshakeResponse_OK,
-		JoinToken: token.String(),
+		JoinToken: randomTokenAsString(),
 	}, nil
 }
 
@@ -97,14 +62,8 @@ func (ms *MeshService) parseJWT(md metadata.MD) error {
 						return err
 					}
 
-					// check claims
-					if !claims.IsForAudience("wgmesh") ||
-						!claims.IsValidAt(time.Now()) {
-
-						return errors.New("token claims not valid, aborting join")
-					}
-
-					log.WithField("claims", claims).Debug("Verified handshake token claims")
+					// TODO check claims, check authn/authz requirements
+					// log.WithField("claims", claims).Debug("Verified handshake token claims")
 
 					return nil
 				}
@@ -349,4 +308,14 @@ func (ms *MeshService) isIPAvailable(ip net.IP) bool {
 	}
 
 	return true
+}
+
+func randomTokenAsString() string {
+	chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, 32)
+	for i := range b {
+		b[i] = chars[rand.Intn(len(chars))]
+	}
+	//	return string(b)
+	return "secret"
 }
